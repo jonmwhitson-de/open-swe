@@ -3,8 +3,9 @@
 import { useGitHubApp } from "@/hooks/useGitHubApp";
 import { createContext, useContext, ReactNode, useState } from "react";
 import type { TargetRepository } from "@openswe/shared/open-swe/types";
+import { ENABLE_GITHUB } from "@openswe/shared/config";
 
-const GITHUB_DISABLED = process.env.NEXT_PUBLIC_GITHUB_DISABLED === "true";
+const GITHUB_DISABLED = !ENABLE_GITHUB;
 
 type GitHubAppContextType = ReturnType<typeof useGitHubApp>;
 
