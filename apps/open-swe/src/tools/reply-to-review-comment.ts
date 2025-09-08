@@ -11,23 +11,13 @@ import {
   quoteReplyToReview,
   replyToReviewComment,
 } from "../utils/github/api.js";
-import { getRecentUserRequest } from "../utils/user-request.js";
-import { RequestSource } from "../constants.js";
 import { GITHUB_USER_LOGIN_HEADER } from "@openswe/shared/constants";
 
 export function shouldIncludeReviewCommentTool(
-  state: GraphState,
+  _state: GraphState,
   config: GraphConfig,
 ): boolean {
-  const userMessage = getRecentUserRequest(state.messages, {
-    returnFullMessage: true,
-    config,
-  });
-  const shouldIncludeReviewCommentTool =
-    userMessage.additional_kwargs?.requestSource ===
-      RequestSource.GITHUB_PULL_REQUEST_WEBHOOK ||
-    !!config.configurable?.reviewPullNumber;
-  return shouldIncludeReviewCommentTool;
+  return !!config.configurable?.reviewPullNumber;
 }
 
 export function createReplyToReviewCommentTool(

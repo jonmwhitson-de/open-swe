@@ -35,7 +35,6 @@ import {
 } from "@openswe/shared/constants";
 import { createLogger, LogLevel } from "../../../../utils/logger.js";
 import { createClassificationPromptAndToolSchema } from "./utils.js";
-import { RequestSource } from "../../../../constants.js";
 import { StreamMode, Thread } from "@langchain/langgraph-sdk";
 import { isLocalMode } from "@openswe/shared/open-swe/local-mode";
 import { PlannerGraphState } from "@openswe/shared/open-swe/planner/types";
@@ -95,9 +94,6 @@ export async function classifyMessage(
     messages: state.messages,
     taskPlan,
     proposedPlan: issuePlans?.proposedPlan ?? undefined,
-    requestSource: userMessage.additional_kwargs?.requestSource as
-      | RequestSource
-      | undefined,
   });
   const respondAndRouteTool = {
     name: "respond_and_route",
