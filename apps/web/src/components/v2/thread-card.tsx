@@ -1,5 +1,4 @@
 import {
-  Bug,
   CheckCircle,
   GitBranch,
   GitPullRequest,
@@ -185,19 +184,6 @@ export function ThreadCard({
             </span>
           </div>
           <div className="flex items-center gap-1">
-            {thread.githubIssue && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-foreground h-5 w-5 p-0 transition-all duration-200 hover:scale-110 hover:bg-orange-100 dark:hover:bg-orange-950"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  window.open(thread.githubIssue!.url, "_blank");
-                }}
-              >
-                <Bug className="h-3 w-3 transition-colors duration-200" />
-              </Button>
-            )}
             {thread.pullRequest && (
               <Button
                 variant="ghost"

@@ -623,8 +623,8 @@ export function AssistantMessage({
       : "";
 
     // Extract PR URL from the tool message content
-    // Format: "Created pull request: https://github.com/owner/repo/pull/123"
-    // or "Marked pull request as ready for review: https://github.com/owner/repo/pull/123"
+    // Expected format: "Created pull request: <url>" or
+    // "Marked pull request as ready for review: <url>"
     let prUrl: string | undefined = undefined;
     if (content) {
       if (content.includes("pull request: ")) {

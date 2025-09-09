@@ -9,8 +9,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { TooltipIconButton } from "@/components/ui/tooltip-icon-button";
-import AuthStatus from "@/components/github/auth-status";
-import { ENABLE_GITHUB } from "@openswe/shared/config";
 
 interface SidebarButtonsProps {
   historyOpen: boolean;
@@ -42,8 +40,6 @@ export const SidebarButtons = forwardRef<HTMLDivElement, SidebarButtonsProps>(
     };
 
     const isSidebarOpen = historyOpen || configOpen;
-    const githubDisabled = !ENABLE_GITHUB;
-
     return (
       <motion.div
         ref={ref}
@@ -108,7 +104,6 @@ export const SidebarButtons = forwardRef<HTMLDivElement, SidebarButtonsProps>(
             >
               <History className="size-5" />
             </TooltipIconButton>
-            {!githubDisabled && <AuthStatus />}
           </div>
         </div>
       </motion.div>

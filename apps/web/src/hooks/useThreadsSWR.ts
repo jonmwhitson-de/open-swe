@@ -7,7 +7,6 @@ import { PlannerGraphState } from "@openswe/shared/open-swe/planner/types";
 import { ReviewerGraphState } from "@openswe/shared/open-swe/reviewer/types";
 import { GraphState } from "@openswe/shared/open-swe/types";
 import { useMemo, useState } from "react";
-import type { Installation } from "./useGitHubInstallations";
 
 type ThreadSortBy = "thread_id" | "status" | "created_at" | "updated_at";
 type SortOrder = "asc" | "desc";
@@ -25,8 +24,6 @@ interface UseThreadsSWROptions {
   refreshInterval?: number;
   revalidateOnFocus?: boolean;
   revalidateOnReconnect?: boolean;
-  currentInstallation?: Installation | null;
-  disableOrgFiltering?: boolean;
   /**
    * Pagination options
    */
@@ -71,8 +68,6 @@ export function useThreadsSWR<
     refreshInterval = THREAD_SWR_CONFIG.refreshInterval,
     revalidateOnFocus = THREAD_SWR_CONFIG.revalidateOnFocus,
     revalidateOnReconnect = THREAD_SWR_CONFIG.revalidateOnReconnect,
-    currentInstallation,
-    disableOrgFiltering,
     pagination,
   } = options;
   const [hasMoreState, setHasMoreState] = useState(true);
@@ -138,27 +133,12 @@ export function useThreadsSWR<
   const threads = useMemo(() => {
     const allThreads = data ?? [];
 
-    if (disableOrgFiltering) {
-      return allThreads;
-    }
-
     if (!allThreads.length) {
       setHasMoreState(false);
     }
 
-    if (!currentInstallation) {
-      setHasMoreState(false);
-      return [];
-    }
-
-    return allThreads.filter((thread) => {
-      const threadInstallationName = thread.metadata?.installation_name;
-      return (
-        typeof threadInstallationName === "string" &&
-        threadInstallationName === currentInstallation.accountName
-      );
-    });
-  }, [data, currentInstallation, disableOrgFiltering]);
+    return allThreads;
+  }, [data]);
 
   const hasMore = useMemo(() => {
     return hasMoreState && !!threads.length;

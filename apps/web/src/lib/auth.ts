@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import jsonwebtoken from "jsonwebtoken";
 import { SESSION_COOKIE } from "@openswe/shared/constants";
 
-export const GITHUB_INSTALLATION_STATE_COOKIE = "github_installation_state";
-export const GITHUB_INSTALLATION_RETURN_TO_COOKIE = "installation_return_to";
-
 export interface SessionUser {
   login: string;
   avatar_url: string;

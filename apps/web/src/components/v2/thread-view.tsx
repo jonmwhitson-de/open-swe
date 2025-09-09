@@ -48,7 +48,6 @@ import { StickToBottom } from "use-stick-to-bottom";
 import { TokenUsage } from "./token-usage";
 import { HumanMessage as HumanMessageSDK } from "@langchain/langgraph-sdk";
 import { getMessageContentString } from "@openswe/shared/messages";
-import { useUser } from "@/hooks/useUser";
 
 interface ThreadViewProps {
   stream: ReturnType<typeof useStream<ManagerGraphState>>;
@@ -94,7 +93,6 @@ export function ThreadView({
   displayThread,
   onBackToHome,
 }: ThreadViewProps) {
-  const { user } = useUser();
   const [chatInput, setChatInput] = useState("");
   const [selectedTab, setSelectedTab] = useState<"planner" | "programmer">(
     "planner",
@@ -114,14 +112,6 @@ export function ThreadView({
     });
 
   const [errorState, setErrorState] = useState<ErrorState | null>(null);
-  const [hasGitHubIssue, setHasGitHubIssue] = useState(false);
-
-  useEffect(() => {
-    stream.client.threads.get(displayThread.id).then((thread) => {
-      const configurable = (thread as Record<string, any>).config?.configurable;
-      setHasGitHubIssue(!!configurable?.shouldCreateIssue);
-    });
-  }, [displayThread.id]);
 
   // Load optimistic message from sessionStorage
   useEffect(() => {
@@ -356,9 +346,8 @@ export function ThreadView({
       ]
     : filteredMessages;
 
-  const shouldDisableManagerInput = !hasGitHubIssue
-    ? stream.isLoading || plannerStream.isLoading || programmerStream.isLoading
-    : false;
+  const shouldDisableManagerInput =
+    stream.isLoading || plannerStream.isLoading || programmerStream.isLoading;
 
   return (
     <div className="bg-background flex h-screen flex-1 flex-col">
@@ -412,7 +401,6 @@ export function ThreadView({
           managerThreadId={displayThread.id}
           plannerThreadId={plannerSession?.threadId}
           programmerThreadId={programmerSession?.threadId}
-          githubUser={user || undefined}
           disableSubmit={shouldDisableManagerInput}
         />
         {/* Right Side - Actions & Plan */}

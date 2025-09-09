@@ -1,7 +1,7 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Archive, Eye, EyeOff, List, ListChecks } from "lucide-react";
+import { Archive, List, ListChecks } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { TerminalInput } from "./terminal-input";
 import { useFileUpload } from "@/hooks/useFileUpload";
@@ -15,14 +15,11 @@ import {
 import { ContentBlocksPreview } from "../thread/ContentBlocksPreview";
 import { ThemeToggle } from "../theme-toggle";
 import { ThreadCard, ThreadCardLoading } from "./thread-card";
-import { GitHubInstallationBanner } from "../github/installation-banner";
 import { ApiKeyBanner } from "../api-key-banner";
-import { IssuesRequiredBanner } from "../github/forked-repository-banner";
 import { QuickActions } from "./quick-actions";
 import { DraftsSection } from "./drafts-section";
 import { MANAGER_GRAPH_ID } from "@openswe/shared/constants";
 import { TooltipIconButton } from "../ui/tooltip-icon-button";
-import { UserPopover } from "../user-popover";
 
 import { useThreadsStatus } from "@/hooks/useThreadsStatus";
 import { Thread } from "@langchain/langgraph-sdk";
@@ -99,9 +96,6 @@ export function DefaultView({ threads, threadsLoading }: DefaultViewProps) {
     handlePaste,
   } = useFileUpload();
   const [autoAccept, setAutoAccept] = useState(false);
-  const [shouldCreateIssue, setShouldCreateIssue] = useState(
-    config?.shouldCreateIssue != null ? !!config.shouldCreateIssue : true,
-  );
   const [customFramework, setCustomFramework] = useState(
     config?.customFramework != null ? !!config.customFramework : false,
   );
@@ -143,7 +137,6 @@ export function DefaultView({ threads, threadsLoading }: DefaultViewProps) {
             <OpenDocumentationButton />
             <OpenSettingsButton />
             <ThemeToggle />
-            <UserPopover />
           </div>
         </div>
       </div>
@@ -151,9 +144,7 @@ export function DefaultView({ threads, threadsLoading }: DefaultViewProps) {
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-4xl space-y-6 p-4">
-          <GitHubInstallationBanner />
           <ApiKeyBanner />
-          <IssuesRequiredBanner />
           {/* Terminal Chat Input */}
           <Card
             className={cn(
@@ -182,8 +173,6 @@ export function DefaultView({ threads, threadsLoading }: DefaultViewProps) {
                   draftToLoad={draftToLoad}
                   autoAcceptPlan={autoAccept}
                   setAutoAcceptPlan={setAutoAccept}
-                  shouldCreateIssue={shouldCreateIssue}
-                  setShouldCreateIssue={setShouldCreateIssue}
                   customFramework={customFramework}
                   setCustomFramework={setCustomFramework}
                 />
@@ -204,24 +193,6 @@ export function DefaultView({ threads, threadsLoading }: DefaultViewProps) {
                       <ListChecks className="size-4" />
                     ) : (
                       <List className="size-4" />
-                    )}
-                  </TooltipIconButton>
-                  <TooltipIconButton
-                    variant={shouldCreateIssue ? "ghost" : "default"}
-                    tooltip="Whether or not to create a GitHub issue for the request"
-                    className={cn(
-                      "transition-colors duration-200",
-                      shouldCreateIssue
-                        ? "text-muted-foreground hover:text-foreground"
-                        : "bg-primary hover:bg-primary/90",
-                    )}
-                    onClick={() => setShouldCreateIssue((prev) => !prev)}
-                    side="bottom"
-                  >
-                    {shouldCreateIssue ? (
-                      <Eye className="size-4" />
-                    ) : (
-                      <EyeOff className="size-4" />
                     )}
                   </TooltipIconButton>
                   <TooltipIconButton
