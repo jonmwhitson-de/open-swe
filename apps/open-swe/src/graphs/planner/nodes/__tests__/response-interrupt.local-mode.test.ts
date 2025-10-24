@@ -196,11 +196,7 @@ describe("planner interrupt flow", () => {
       "Please add more detail to step 2.",
     );
     expect(update.messages).toHaveLength(1);
-    const firstMessage = update.messages?.[0];
-    if (!firstMessage) {
-      throw new Error("Expected first message to be defined");
-    }
-    expect(isHumanMessage(firstMessage)).toBe(true);
+    expect(isHumanMessage(update.messages?.[0])).toBe(true);
 
     const updatedState: PlannerGraphState = {
       ...state,
