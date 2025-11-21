@@ -285,24 +285,17 @@ export function ThreadView({
 
   useEffect(() => {
     if (
-      selectedFeatureRunState?.status === "running" &&
-      selectedFeatureRunState.threadId &&
-      selectedFeatureRunState.runId &&
+      selectedFeatureRunState?.runId &&
       selectedFeatureRunState.runId !== joinedFeatureRunId.current
     ) {
       joinedFeatureRunId.current = selectedFeatureRunState.runId;
       featureRunStream
         .joinStream(selectedFeatureRunState.runId)
         .catch(() => {});
-    } else if (selectedFeatureRunState?.status !== "running") {
+    } else if (!selectedFeatureRunState?.runId) {
       joinedFeatureRunId.current = undefined;
     }
-  }, [
-    featureRunStream,
-    selectedFeatureRunState?.runId,
-    selectedFeatureRunState?.status,
-    selectedFeatureRunState?.threadId,
-  ]);
+  }, [featureRunStream, selectedFeatureRunState?.runId]);
 
   useEffect(() => {
     if (!selectedFeatureId || !selectedFeatureRunState) return;
