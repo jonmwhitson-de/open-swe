@@ -67,6 +67,22 @@ export type PlanItem = {
   featureIds?: string[];
 };
 
+export const WorkflowStageStatusSchema = z.enum([
+  "pending",
+  "running",
+  "completed",
+]);
+
+export type WorkflowStageStatus = z.infer<typeof WorkflowStageStatusSchema>;
+
+export const ThreadWorkflowStagesSchema = z.object({
+  featureGraph: WorkflowStageStatusSchema,
+  planner: WorkflowStageStatusSchema,
+  programmer: WorkflowStageStatusSchema,
+});
+
+export type ThreadWorkflowStages = z.infer<typeof ThreadWorkflowStagesSchema>;
+
 export type PlanRevision = {
   /**
    * The revision index of the plan.

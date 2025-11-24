@@ -36,6 +36,7 @@ export function useThreadMetadata(thread: Thread<ManagerGraphState>): {
       branch: values?.targetRepository?.branch || "main",
       taskPlan: realTimeTaskPlan,
       status,
+      workflowStages: values?.workflowStages,
     };
   }, [thread, status, realTimeTaskPlan]);
 

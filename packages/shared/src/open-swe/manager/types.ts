@@ -1,5 +1,11 @@
 import { MessagesZodState } from "@langchain/langgraph";
-import { TargetRepository, TaskPlan, AgentSession } from "../types.js";
+import {
+  TargetRepository,
+  TaskPlan,
+  AgentSession,
+  ThreadWorkflowStages,
+  ThreadWorkflowStagesSchema,
+} from "../types.js";
 import type { FeatureGraph } from "../../feature-graph/graph.js";
 import { z } from "zod";
 import { withLangGraph } from "@langchain/langgraph/zod";
@@ -70,6 +76,15 @@ export const ManagerGraphStateObj = MessagesZodState.extend({
    * Tracks feature proposals and their lifecycle state across turns.
    */
   featureProposals: FeatureProposalStateSchema.optional(),
+  /**
+   * Tracks the workflow state across the feature graph, planner, and programmer stages.
+   */
+  workflowStages: withLangGraph(z.custom<ThreadWorkflowStages>(), {
+    reducer: {
+      schema: ThreadWorkflowStagesSchema,
+      fn: (_state, update) => update,
+    },
+  }).optional(),
 });
 
 export type ManagerGraphState = z.infer<typeof ManagerGraphStateObj>;
