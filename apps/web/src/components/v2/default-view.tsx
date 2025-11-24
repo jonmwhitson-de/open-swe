@@ -1,9 +1,19 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Archive, List, ListChecks } from "lucide-react";
+import {
+  Archive,
+  Brain,
+  List,
+  ListChecks,
+  Network,
+  Settings,
+  BookOpen,
+  Workflow,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { TerminalInput } from "./terminal-input";
+import { INITIAL_WORKFLOW_STAGES, TerminalInput } from "./terminal-input";
 import { RepositorySelect } from "./repository-select";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { cn } from "@/lib/utils";
@@ -28,11 +38,11 @@ import { Thread } from "@langchain/langgraph-sdk";
 import { ManagerGraphState } from "@openswe/shared/open-swe/manager/types";
 import { useState, useMemo } from "react";
 import { threadsToMetadata } from "@/lib/thread-utils";
-import { Settings, BookOpen } from "lucide-react";
 import NextLink from "next/link";
 import { OpenSWELogo } from "../icons/openswe-logo";
 import { OpenSWEIcon } from "../icons/openswe-icon";
 import { DEFAULT_CONFIG_KEY, useConfigStore } from "@/hooks/useConfigStore";
+import { ThreadWorkflowStages } from "@openswe/shared/open-swe/types";
 
 function OpenSettingsButton() {
   return (
@@ -73,6 +83,86 @@ function OpenDocumentationButton() {
         <TooltipContent side="bottom">Open Documentation</TooltipContent>
       </Tooltip>
     </TooltipProvider>
+  );
+}
+
+type WorkflowStageKey = keyof ThreadWorkflowStages;
+
+const WORKFLOW_STAGES: Record<WorkflowStageKey, {
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  accent: string;
+}> = {
+  featureGraph: {
+    title: "Feature Graph",
+    description: "Map the workspace and active features before planning.",
+    icon: Network,
+    accent: "bg-purple-500/10 text-purple-500",
+  },
+  planner: {
+    title: "Planner",
+    description: "Break down the request into sequenced tasks.",
+    icon: Brain,
+    accent: "bg-blue-500/10 text-blue-500",
+  },
+  programmer: {
+    title: "Programmer",
+    description: "Write and test the changes across the repo.",
+    icon: Workflow,
+    accent: "bg-green-500/10 text-green-500",
+  },
+};
+
+function WorkflowStageCard({
+  stage,
+  status,
+}: {
+  stage: WorkflowStageKey;
+  status: ThreadWorkflowStages[WorkflowStageKey];
+}) {
+  const config = WORKFLOW_STAGES[stage];
+  const statusCopy: Record<ThreadWorkflowStages[WorkflowStageKey], string> = {
+    pending: "Ready",
+    running: "In progress",
+    completed: "Completed",
+  };
+
+  const statusTone =
+    status === "completed"
+      ? "bg-emerald-500/10 text-emerald-500"
+      : status === "running"
+        ? "bg-amber-500/10 text-amber-500"
+        : "bg-slate-500/10 text-slate-500";
+
+  const Icon = config.icon;
+
+  return (
+    <div className="border-border bg-background/60 hover:border-primary/30 hover:shadow-sm rounded-lg border p-3 transition-colors duration-200">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-3">
+          <div className={cn("rounded-md p-2", config.accent)}>
+            <Icon className="size-4" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold leading-tight">
+              {config.title}
+            </p>
+            <p className="text-muted-foreground text-xs leading-tight">
+              {config.description}
+            </p>
+          </div>
+        </div>
+        <span
+          className={cn(
+            "border-border bg-muted text-muted-foreground rounded-full border px-2 py-1 text-[11px] font-medium capitalize",
+            statusTone,
+          )}
+        >
+          {statusCopy[status]}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -148,7 +238,7 @@ export function DefaultView({ threads, threadsLoading }: DefaultViewProps) {
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-4xl space-y-6 p-4">
           <ApiKeyBanner />
-          {/* Terminal Chat Input */}
+          {/* Workflow Launcher */}
           <Card
             className={cn(
               "border-border bg-card py-0",
@@ -158,65 +248,116 @@ export function DefaultView({ threads, threadsLoading }: DefaultViewProps) {
             )}
             ref={dropRef}
           >
-            <CardContent className="p-4">
-              <ContentBlocksPreview
-                blocks={contentBlocks}
-                onRemove={removeBlock}
-              />
-              <div className="space-y-3">
-                <RepositorySelect />
-                <TerminalInput
-                  placeholder="Describe your coding task or ask a question..."
-                  apiUrl={apiUrl}
-                  assistantId={assistantId}
-                  contentBlocks={contentBlocks}
-                  setContentBlocks={setContentBlocks}
-                  onPaste={handlePaste}
-                  quickActionPrompt={quickActionPrompt}
-                  setQuickActionPrompt={setQuickActionPrompt}
-                  draftToLoad={draftToLoad}
-                  autoAcceptPlan={autoAccept}
-                  setAutoAcceptPlan={setAutoAccept}
-                  customFramework={customFramework}
-                  setCustomFramework={setCustomFramework}
-                />
-                <div className="flex items-center gap-2">
-                  <TooltipIconButton
-                    variant={autoAccept ? "default" : "ghost"}
-                    tooltip="Whether or not to automatically accept the plan"
-                    className={cn(
-                      "transition-colors duration-200",
-                      autoAccept
-                        ? "bg-primary hover:bg-primary/90"
-                        : "text-muted-foreground hover:text-foreground",
+            <CardContent className="p-4 lg:p-6">
+              <div className="mb-4 flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <Workflow className="size-4" />
+                  Staged Workflow
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-foreground text-lg font-semibold">
+                      Pick a repo, describe the task, launch the thread
+                    </p>
+                    <p className="text-muted-foreground text-sm">
+                      The Feature Graph, Planner, and Programmer stages will run in order.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+                <div className="space-y-4">
+                  <RepositorySelect />
+                  <ContentBlocksPreview
+                    blocks={contentBlocks}
+                    onRemove={removeBlock}
+                  />
+                  <TerminalInput
+                    placeholder="Describe your coding task or ask a question..."
+                    apiUrl={apiUrl}
+                    assistantId={assistantId}
+                    contentBlocks={contentBlocks}
+                    setContentBlocks={setContentBlocks}
+                    onPaste={handlePaste}
+                    quickActionPrompt={quickActionPrompt}
+                    setQuickActionPrompt={setQuickActionPrompt}
+                    draftToLoad={draftToLoad}
+                    autoAcceptPlan={autoAccept}
+                    setAutoAcceptPlan={setAutoAccept}
+                    customFramework={customFramework}
+                    setCustomFramework={setCustomFramework}
+                    ctaLabel="Launch staged thread"
+                  />
+                  <div className="flex flex-wrap items-center gap-3 rounded-md bg-muted/50 px-3 py-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <TooltipIconButton
+                        variant={autoAccept ? "default" : "ghost"}
+                        tooltip="Whether or not to automatically accept the plan"
+                        className={cn(
+                          "transition-colors duration-200",
+                          autoAccept
+                            ? "bg-primary hover:bg-primary/90"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                        onClick={() => setAutoAccept((prev) => !prev)}
+                        side="bottom"
+                      >
+                        {autoAccept ? (
+                          <ListChecks className="size-4" />
+                        ) : (
+                          <List className="size-4" />
+                        )}
+                      </TooltipIconButton>
+                      <span className="text-muted-foreground">Auto-accept plan</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <TooltipIconButton
+                        variant={customFramework ? "default" : "ghost"}
+                        tooltip="Use LangGraph Engineer when writing LangGraph code for better results"
+                        className={cn(
+                          "transition-colors duration-200",
+                          customFramework
+                            ? "bg-primary hover:bg-primary/90"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                        onClick={() => setCustomFramework((prev) => !prev)}
+                        side="bottom"
+                      >
+                        {customFramework ? (
+                          <OpenSWEIcon className="size-5" />
+                        ) : (
+                          <OpenSWEIcon className="size-5" />
+                        )}
+                      </TooltipIconButton>
+                      <span className="text-muted-foreground">Prefer LangGraph Engineer</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-border bg-muted/40 rounded-lg border p-4">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold">Three-stage thread</p>
+                      <p className="text-muted-foreground text-xs">
+                        Feature Graph → Planner → Programmer
+                      </p>
+                    </div>
+                    <span className="bg-primary/10 text-primary rounded-full px-2 py-1 text-[11px] font-medium">
+                      Guided
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {Object.entries(INITIAL_WORKFLOW_STAGES).map(
+                      ([stage, status]) => (
+                        <WorkflowStageCard
+                          key={stage}
+                          stage={stage as WorkflowStageKey}
+                          status={status as ThreadWorkflowStages[WorkflowStageKey]}
+                        />
+                      ),
                     )}
-                    onClick={() => setAutoAccept((prev) => !prev)}
-                    side="bottom"
-                  >
-                    {autoAccept ? (
-                      <ListChecks className="size-4" />
-                    ) : (
-                      <List className="size-4" />
-                    )}
-                  </TooltipIconButton>
-                  <TooltipIconButton
-                    variant={customFramework ? "default" : "ghost"}
-                    tooltip="Use LangGraph Engineer when writing LangGraph code for better results"
-                    className={cn(
-                      "transition-colors duration-200",
-                      customFramework
-                        ? "bg-primary hover:bg-primary/90"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                    onClick={() => setCustomFramework((prev) => !prev)}
-                    side="bottom"
-                  >
-                    {customFramework ? (
-                      <OpenSWEIcon className="size-5" />
-                    ) : (
-                      <OpenSWEIcon className="size-5" />
-                    )}
-                  </TooltipIconButton>
+                  </div>
                 </div>
               </div>
             </CardContent>

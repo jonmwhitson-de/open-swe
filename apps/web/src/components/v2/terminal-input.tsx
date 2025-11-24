@@ -15,7 +15,10 @@ import { Button } from "../ui/button";
 import { useStream } from "@langchain/langgraph-sdk/react";
 import { useRouter } from "next/navigation";
 import { useQueryState } from "nuqs";
-import { GraphState } from "@openswe/shared/open-swe/types";
+import {
+  GraphState,
+  ThreadWorkflowStages,
+} from "@openswe/shared/open-swe/types";
 import { Base64ContentBlock, HumanMessage } from "@langchain/core/messages";
 import { toast } from "sonner";
 import { DEFAULT_CONFIG_KEY, useConfigStore } from "@/hooks/useConfigStore";
@@ -46,6 +49,7 @@ interface TerminalInputProps {
   draftToLoad?: string;
   customFramework: boolean;
   setCustomFramework: Dispatch<SetStateAction<boolean>>;
+  ctaLabel?: string;
 }
 
 const MISSING_API_KEYS_TOAST_CONTENT = (
@@ -66,6 +70,12 @@ const MISSING_API_KEYS_TOAST_OPTIONS = {
   closeButton: true,
 };
 
+const INITIAL_WORKFLOW_STAGES: ThreadWorkflowStages = {
+  featureGraph: "pending",
+  planner: "pending",
+  programmer: "pending",
+};
+
 export function TerminalInput({
   placeholder = "Enter your command...",
   disabled = false,
@@ -81,6 +91,7 @@ export function TerminalInput({
   draftToLoad,
   customFramework,
   setCustomFramework,
+  ctaLabel = "Launch workflow",
 }: TerminalInputProps) {
   const { push } = useRouter();
   const { message, setMessage, clearCurrentDraft } = useDraftStorage();
@@ -177,6 +188,7 @@ export function TerminalInput({
           targetRepository: { owner: "", repo: selectedRepository },
           workspaceAbsPath,
           autoAcceptPlan,
+          workflowStages: { ...INITIAL_WORKFLOW_STAGES },
         };
 
         const run = await stream.client.runs.create(
@@ -275,52 +287,56 @@ export function TerminalInput({
   }, [draftToLoad, setMessage]);
 
   return (
-    <div className="border-border bg-muted hover:border-muted-foreground/50 hover:bg-muted/80 focus-within:border-muted-foreground/70 focus-within:bg-muted/80 focus-within:shadow-muted-foreground/20 rounded-md border p-2 font-mono text-xs transition-all duration-200 focus-within:shadow-md">
-      <div className="text-foreground flex items-center gap-1">
-        <div className="border-border bg-background/50 flex items-center gap-1 rounded-md border p-1 transition-colors duration-200">
-          <span className="text-muted-foreground">agent</span>
-          <span className="text-muted-foreground/70">@</span>
-          <span className="text-muted-foreground">workspace</span>
+    <div className="bg-muted/50 border-border rounded-lg border p-4 shadow-sm">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">Describe your task</p>
+          <p className="text-muted-foreground text-xs">
+            Outline the feature or fix and any constraints.
+          </p>
         </div>
-
-        {/* Prompt */}
-        <span className="text-muted-foreground">$</span>
-
         <Button
           onClick={handleSend}
           disabled={
-            disabled || !message.trim() || !selectedRepository || isUserLoading
+            disabled ||
+            isUserLoading ||
+            (!message.trim() && contentBlocks.length === 0) ||
+            !selectedRepository
           }
-          size="icon"
+          size="sm"
           variant="brand"
-          className="ml-auto size-8 rounded-full border border-white/20 transition-all duration-200 hover:border-white/30 disabled:border-transparent"
+          className="gap-2"
         >
           {loading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <ArrowUp className="size-4" />
+            <ArrowUp className="h-4 w-4" />
           )}
+          {ctaLabel}
         </Button>
       </div>
 
-      {/* Multiline Input */}
-      <div className="my-2 flex gap-2">
+      <div className="flex gap-2">
         <Textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyPress}
           placeholder={placeholder}
           disabled={disabled}
-          className="text-foreground placeholder:text-muted-foreground focus:placeholder:text-muted-foreground/60 max-h-[50vh] min-h-[80px] flex-1 resize-none border-none bg-transparent p-0 font-mono text-xs shadow-none transition-all duration-200 focus-visible:ring-0 focus-visible:ring-offset-0"
+          className="text-foreground placeholder:text-muted-foreground focus:placeholder:text-muted-foreground/60 max-h-[50vh] min-h-[120px] flex-1 resize-none border-border bg-background/60 p-3 font-mono text-xs shadow-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-primary/40"
           rows={6}
           onPaste={onPaste}
         />
       </div>
 
-      {/* Help text */}
-      <div className="text-muted-foreground mt-1 text-xs">
-        Press Cmd+Enter to send
+      <div className="text-muted-foreground mt-2 flex items-center justify-between text-xs">
+        <span>Press Cmd+Enter to launch the workflow</span>
+        <span className="text-muted-foreground/80">
+          repo: {selectedRepository || "not selected"}
+        </span>
       </div>
     </div>
   );
 }
+
+export { INITIAL_WORKFLOW_STAGES };

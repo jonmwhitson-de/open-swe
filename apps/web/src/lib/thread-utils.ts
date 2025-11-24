@@ -31,6 +31,7 @@ export function threadsToMetadata(
       branch: values?.targetRepository?.branch || "main",
       taskPlan: values?.taskPlan,
       status: "idle" as const, // Default status - consumers can override with real status
+      workflowStages: values?.workflowStages,
     };
   });
 }
