@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { StreamMode } from "@langchain/langgraph-sdk";
+import { Metadata, StreamMode } from "@langchain/langgraph-sdk";
 import {
   clarifyFeatureDescription,
   FeatureGraph,
@@ -233,6 +233,25 @@ export function registerFeatureGraphRoute(app: Hono) {
           });
         });
 
+        const updatedMetadata = {
+          ...(managerThreadState.metadata ?? {}),
+          configurable: {
+            ...((managerThreadState.metadata?.configurable as
+              | Record<string, unknown>
+              | undefined) ?? {}),
+            run_id: existingPlannerSession.runId,
+            thread_id: plannerThreadId,
+          },
+        } as Metadata;
+
+        await client.threads
+          .patchState(threadId, updatedMetadata)
+          .catch((error) => {
+            logger.error("Failed to update manager metadata after feature develop", {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+
       return ctx.json({
         planner_thread_id: plannerThreadId,
         run_id: existingPlannerSession.runId,
@@ -240,24 +259,27 @@ export function registerFeatureGraphRoute(app: Hono) {
     }
 
     let run;
+    const plannerRunConfigurable = {
+      ...getCustomConfigurableFields({
+        configurable: (managerThreadState.metadata?.configurable ?? {}) as
+          | GraphConfig["configurable"]
+          | undefined,
+      } as GraphConfig),
+      ...(managerThreadState.values.workspacePath
+        ? { workspacePath: managerThreadState.values.workspacePath }
+        : {}),
+      ...(process.env.OPEN_SWE_LOCAL_MODE === "true"
+        ? { [LOCAL_MODE_HEADER]: "true" }
+        : {}),
+      thread_id: plannerThreadId,
+    } satisfies Record<string, unknown>;
+
     try {
       run = await client.runs.create(plannerThreadId, PLANNER_GRAPH_ID, {
         input: plannerRunInput,
         config: {
           recursion_limit: 400,
-          configurable: {
-            ...getCustomConfigurableFields({
-              configurable: (managerThreadState.metadata?.configurable ?? {}) as
-                | GraphConfig["configurable"]
-                | undefined,
-            } as GraphConfig),
-            ...(managerThreadState.values.workspacePath
-              ? { workspacePath: managerThreadState.values.workspacePath }
-              : {}),
-            ...(process.env.OPEN_SWE_LOCAL_MODE === "true"
-              ? { [LOCAL_MODE_HEADER]: "true" }
-              : {}),
-          },
+          configurable: plannerRunConfigurable,
         },
         ifNotExists: "create",
         streamResumable: true,
@@ -280,6 +302,11 @@ export function registerFeatureGraphRoute(app: Hono) {
       );
     }
 
+    const runIdentifiers = {
+      run_id: run.run_id,
+      thread_id: plannerThreadId,
+    };
+
     const updatedManagerState: ManagerGraphUpdate = {
       plannerSession: {
         threadId: plannerThreadId,
@@ -299,6 +326,24 @@ export function registerFeatureGraphRoute(app: Hono) {
       })
       .catch((error) => {
         logger.error("Failed to update manager state after feature develop", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+
+    const updatedMetadata = {
+      ...(managerThreadState.metadata ?? {}),
+      configurable: {
+        ...((managerThreadState.metadata?.configurable as
+          | Record<string, unknown>
+          | undefined) ?? {}),
+        ...runIdentifiers,
+      },
+    } as Metadata;
+
+    await client.threads
+      .patchState(threadId, updatedMetadata)
+      .catch((error) => {
+        logger.error("Failed to update manager metadata after feature develop", {
           error: error instanceof Error ? error.message : String(error),
         });
       });
