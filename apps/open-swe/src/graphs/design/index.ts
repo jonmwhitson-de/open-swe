@@ -21,26 +21,22 @@ import {
  *   - handoff-to-planner (when ready to develop) → END
  *   - END (when design session is complete)
  */
+const workflow = new StateGraph(DesignGraphStateObj, GraphConfiguration)
+  .addNode("classify-design-intent", classifyDesignIntent, {
+    ends: [END, "design-agent", "handoff-to-planner"],
+  })
+  .addNode("design-agent", designAgent, {
+    ends: [END],
+  })
+  .addNode("handoff-to-planner", handoffToPlanner, {
+    ends: [END],
+  })
+  .addEdge(START, "classify-design-intent")
+  .addEdge("classify-design-intent", "design-agent")
+  .addEdge("classify-design-intent", "handoff-to-planner")
+  .addEdge("classify-design-intent", END)
+  .addEdge("design-agent", END)
+  .addEdge("handoff-to-planner", END);
 
-// Build the graph with explicit type annotation to help TypeScript
-const builder = new StateGraph(DesignGraphStateObj, GraphConfiguration);
-
-builder.addNode("classify-design-intent", classifyDesignIntent, {
-  ends: [END, "design-agent", "handoff-to-planner"],
-});
-builder.addNode("design-agent", designAgent, {
-  ends: [END],
-});
-builder.addNode("handoff-to-planner", handoffToPlanner, {
-  ends: [END],
-});
-
-builder.addEdge(START, "classify-design-intent");
-builder.addEdge("classify-design-intent", "design-agent");
-builder.addEdge("classify-design-intent", "handoff-to-planner");
-builder.addEdge("classify-design-intent", END);
-builder.addEdge("design-agent", END);
-builder.addEdge("handoff-to-planner", END);
-
-export const graph = builder.compile();
+export const graph = workflow.compile();
 graph.name = "Open SWE - Design";
