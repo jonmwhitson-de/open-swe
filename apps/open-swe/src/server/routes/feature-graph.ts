@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { StreamMode } from "@langchain/langgraph-sdk";
+import { Metadata, StreamMode } from "@langchain/langgraph-sdk";
 import {
   clarifyFeatureDescription,
   FeatureGraph,
@@ -233,6 +233,24 @@ export function registerFeatureGraphRoute(app: Hono) {
           });
         });
 
+        const updatedMetadata = {
+          ...(managerThreadState.metadata ?? {}),
+          configurable: {
+            ...((managerThreadState.metadata?.configurable as
+              | Record<string, unknown>
+              | undefined) ?? {}),
+            run_id: existingPlannerSession.runId,
+            thread_id: plannerThreadId,
+          },
+        } as Metadata;
+
+        await client.threads
+          .patchState(threadId, updatedMetadata)
+          .catch((error) => {
+            logger.error("Failed to update manager metadata after feature develop", {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
       await client.threads
         .patchState(threadId, {
           configurable: {
@@ -325,6 +343,18 @@ export function registerFeatureGraphRoute(app: Hono) {
         });
       });
 
+    const updatedMetadata = {
+      ...(managerThreadState.metadata ?? {}),
+      configurable: {
+        ...((managerThreadState.metadata?.configurable as
+          | Record<string, unknown>
+          | undefined) ?? {}),
+        ...runIdentifiers,
+      },
+    } as Metadata;
+
+    await client.threads
+      .patchState(threadId, updatedMetadata)
     await client.threads
       .patchState(threadId, {
         configurable: {
