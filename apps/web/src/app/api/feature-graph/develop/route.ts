@@ -50,11 +50,15 @@ function getFeatureDependencies(graph: FeatureGraph, featureId: string): Feature
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const apiUrl = resolveApiUrl();
+  let threadId: string | null = null;
+  let featureId: string = "";
+
   try {
     const body = await request.json();
-    const threadId =
+    threadId =
       resolveThreadId(body?.thread_id) ?? resolveThreadId(body?.threadId);
-    const featureId =
+    featureId =
       typeof body?.feature_id === "string"
         ? body.feature_id.trim()
         : typeof body?.featureId === "string"
@@ -76,15 +80,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const client = new Client({
-      apiUrl: resolveApiUrl(),
+      apiUrl,
       defaultHeaders:
         process.env.OPEN_SWE_LOCAL_MODE === "true"
           ? { [LOCAL_MODE_HEADER]: "true" }
           : undefined,
     });
 
-    const managerThreadState =
-      await client.threads.getState<ManagerGraphState>(threadId);
+    // Fetch manager thread state
+    let managerThreadState;
+    try {
+      managerThreadState = await client.threads.getState<ManagerGraphState>(threadId);
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      console.error("[develop] Failed to fetch manager state:", { threadId, status, error: err });
+      return NextResponse.json(
+        { error: `Failed to fetch manager state: ${status === 404 ? "Thread not found" : "LangGraph API error"}` },
+        { status: status ?? 500 },
+      );
+    }
 
     if (!managerThreadState?.values) {
       return NextResponse.json(
@@ -97,23 +111,35 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const featureGraph = coerceFeatureGraph(managerState.featureGraph);
     if (!featureGraph) {
       return NextResponse.json(
-        { error: "Feature graph not available for thread" },
+        { error: "Feature graph not available for thread. Generate a feature graph first." },
         { status: 404 },
       );
     }
 
-    const { graph: reconciledGraph, dependencyMap } =
-      reconcileFeatureGraph(featureGraph);
+    // Reconcile feature graph
+    let reconciledGraph: FeatureGraph;
+    let dependencyMap: Record<string, string[]>;
+    try {
+      const result = reconcileFeatureGraph(featureGraph);
+      reconciledGraph = result.graph;
+      dependencyMap = result.dependencyMap;
+    } catch (err) {
+      console.error("[develop] Failed to reconcile feature graph:", err);
+      return NextResponse.json(
+        { error: "Failed to process feature graph" },
+        { status: 500 },
+      );
+    }
 
     const existingPlannerSession = managerState.plannerSession;
-    const plannerThreadId =
-      existingPlannerSession?.threadId ?? randomUUID();
+    // Always create a NEW planner thread to avoid "thread busy" errors
+    const plannerThreadId = randomUUID();
 
     const selectedFeature = reconciledGraph.getFeature(featureId);
 
     if (!selectedFeature) {
       return NextResponse.json(
-        { error: "Feature not found in manager state" },
+        { error: `Feature "${featureId}" not found in feature graph` },
         { status: 404 },
       );
     }
@@ -152,55 +178,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         ? { [LOCAL_MODE_HEADER]: "true" }
         : {}),
       thread_id: plannerThreadId,
-      ...(existingPlannerSession?.runId
-        ? { run_id: existingPlannerSession.runId }
-        : {}),
     } satisfies Record<string, unknown>;
 
-    if (existingPlannerSession?.threadId && existingPlannerSession?.runId) {
-      const updatedManagerState: ManagerGraphUpdate = {
-        plannerSession: {
-          threadId: plannerThreadId,
-          runId: existingPlannerSession.runId,
+    // Create a new planner run (always create new thread to avoid "thread busy")
+    let run;
+    try {
+      run = await client.runs.create(plannerThreadId, PLANNER_GRAPH_ID, {
+        input: plannerRunInput,
+        config: {
+          recursion_limit: 400,
+          configurable: plannerRunConfigurableBase,
         },
-        activeFeatureIds: [featureId],
-        featureGraph: reconciledGraph,
-      };
-
-      const managerConfigurable = {
-        ...(managerThreadState.metadata?.configurable ?? {}),
-        run_id: existingPlannerSession.runId,
-        thread_id: plannerThreadId,
-      } satisfies Record<string, unknown>;
-
-      await client.threads.updateState<ManagerGraphState>(threadId, {
-        values: {
-          ...managerState,
-          ...updatedManagerState,
-        },
-        asNode: "start-planner",
+        ifNotExists: "create",
+        streamResumable: true,
+        streamMode: OPEN_SWE_STREAM_MODE as StreamMode[],
       });
-
-      await client.threads.patchState(threadId, {
-        configurable: managerConfigurable,
-      });
-
-      return NextResponse.json({
-        planner_thread_id: plannerThreadId,
-        run_id: existingPlannerSession.runId,
-      });
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error("[develop] Failed to create planner run:", { plannerThreadId, error: err });
+      return NextResponse.json(
+        { error: `Failed to create planner run: ${errMsg}` },
+        { status: 500 },
+      );
     }
-
-    const run = await client.runs.create(plannerThreadId, PLANNER_GRAPH_ID, {
-      input: plannerRunInput,
-      config: {
-        recursion_limit: 400,
-        configurable: plannerRunConfigurableBase,
-      },
-      ifNotExists: "create",
-      streamResumable: true,
-      streamMode: OPEN_SWE_STREAM_MODE as StreamMode[],
-    });
 
     const runIdentifiers = {
       run_id: run.run_id,
@@ -221,24 +221,40 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       featureGraph: reconciledGraph,
     };
 
-    await client.threads.updateState<ManagerGraphState>(threadId, {
-      values: {
-        ...managerState,
-        ...updatedManagerState,
-      },
-      asNode: "start-planner",
-    });
+    // Update manager thread state
+    try {
+      await client.threads.updateState<ManagerGraphState>(threadId, {
+        values: {
+          ...managerState,
+          ...updatedManagerState,
+        },
+        asNode: "start-planner",
+      });
+    } catch (err) {
+      console.error("[develop] Failed to update manager state:", err);
+      // Continue anyway - the planner run was created successfully
+    }
 
-    await client.threads.patchState(threadId, {
-      configurable: {
-        ...(managerThreadState.metadata?.configurable ?? {}),
-        ...runIdentifiers,
-      },
-    });
+    try {
+      await client.threads.patchState(threadId, {
+        configurable: {
+          ...(managerThreadState.metadata?.configurable ?? {}),
+          ...runIdentifiers,
+        },
+      });
+    } catch (err) {
+      console.error("[develop] Failed to patch manager configurable:", err);
+      // Continue anyway
+    }
 
-    await client.threads.patchState(plannerThreadId, {
-      configurable: plannerRunConfigurable,
-    });
+    try {
+      await client.threads.patchState(plannerThreadId, {
+        configurable: plannerRunConfigurable,
+      });
+    } catch (err) {
+      console.error("[develop] Failed to patch planner configurable:", err);
+      // Continue anyway
+    }
 
     return NextResponse.json({
       planner_thread_id: plannerThreadId,
@@ -247,6 +263,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to start feature run";
+    console.error("[develop] Unexpected error:", { threadId, featureId, error });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
