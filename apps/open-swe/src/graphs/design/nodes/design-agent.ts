@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { Command, END, interrupt } from "@langchain/langgraph";
+import { Command, END } from "@langchain/langgraph";
 import { GraphConfig } from "@openswe/shared/open-swe/types";
 import {
   DesignGraphState,
