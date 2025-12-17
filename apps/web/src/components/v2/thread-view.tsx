@@ -325,20 +325,39 @@ export function ThreadView({
   });
 
   const joinedFeatureRunId = useRef<string | undefined>(undefined);
+  const joinedFeatureThreadId = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (
       selectedFeatureRunState?.status === "running" &&
       selectedFeatureRunState.threadId &&
       selectedFeatureRunState.runId &&
-      selectedFeatureRunState.runId !== joinedFeatureRunId.current
+      (selectedFeatureRunState.runId !== joinedFeatureRunId.current ||
+       selectedFeatureRunState.threadId !== joinedFeatureThreadId.current)
     ) {
+      // Store the current thread/run IDs we're joining
       joinedFeatureRunId.current = selectedFeatureRunState.runId;
+      joinedFeatureThreadId.current = selectedFeatureRunState.threadId;
+
+      console.log("[ThreadView] Joining feature run stream:", {
+        threadId: selectedFeatureRunState.threadId,
+        runId: selectedFeatureRunState.runId,
+      });
+
       featureRunStream
         .joinStream(selectedFeatureRunState.runId)
-        .catch(() => {});
+        .then(() => {
+          console.log("[ThreadView] Successfully joined feature run stream");
+        })
+        .catch((err) => {
+          console.error("[ThreadView] Failed to join feature run stream:", err);
+          // Reset refs so we can retry
+          joinedFeatureRunId.current = undefined;
+          joinedFeatureThreadId.current = undefined;
+        });
     } else if (selectedFeatureRunState?.status !== "running") {
       joinedFeatureRunId.current = undefined;
+      joinedFeatureThreadId.current = undefined;
     }
   }, [
     featureRunStream,
