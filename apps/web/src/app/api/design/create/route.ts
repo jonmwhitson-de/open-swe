@@ -5,7 +5,6 @@ import {
   LOCAL_MODE_HEADER,
   OPEN_SWE_STREAM_MODE,
   DESIGN_GRAPH_ID,
-  MANAGER_GRAPH_ID,
 } from "@openswe/shared/constants";
 import type { ManagerGraphState } from "@openswe/shared/open-swe/manager/types";
 import type { DesignGraphUpdate } from "@openswe/shared/open-swe/design/types";

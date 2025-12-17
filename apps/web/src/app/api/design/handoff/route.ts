@@ -4,7 +4,6 @@ import { Client, StreamMode } from "@langchain/langgraph-sdk";
 import {
   LOCAL_MODE_HEADER,
   OPEN_SWE_STREAM_MODE,
-  DESIGN_GRAPH_ID,
   PLANNER_GRAPH_ID,
 } from "@openswe/shared/constants";
 import type { DesignGraphState } from "@openswe/shared/open-swe/design/types";
@@ -140,7 +139,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       targetRepository: designState.targetRepository,
       taskPlan: {
         tasks: [],
-        reasoning: `Design handoff for features: ${featureIdsToHandoff.join(", ")}`,
+        activeTaskIndex: 0,
       },
       branchName: `design-${plannerThreadId.slice(0, 8)}`,
       workspacePath: designState.workspacePath,
