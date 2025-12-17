@@ -1,9 +1,8 @@
 import { MessagesZodState } from "@langchain/langgraph";
 import { z } from "zod";
 import { withLangGraph } from "@langchain/langgraph/zod";
-import { TargetRepository, AgentSession } from "../types.js";
+import { TargetRepository } from "../types.js";
 import { FeatureGraph } from "../../feature-graph/graph.js";
-import type { FeatureNode, FeatureEdge } from "../../feature-graph/types.js";
 
 /**
  * Represents a pending change to the feature graph that requires user approval.
