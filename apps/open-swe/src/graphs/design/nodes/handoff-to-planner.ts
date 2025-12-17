@@ -5,7 +5,6 @@ import { isLocalMode } from "@openswe/shared/open-swe/local-mode";
 import {
   DesignGraphState,
   DesignGraphUpdate,
-  DesignHandoffResult,
 } from "@openswe/shared/open-swe/design/types";
 import { PlannerGraphUpdate } from "@openswe/shared/open-swe/planner/types";
 import { createLangGraphClient } from "../../../utils/langgraph-client.js";
@@ -104,7 +103,7 @@ export async function handoffToPlanner(
       targetRepository,
       taskPlan: {
         tasks: [],
-        reasoning: `Design handoff for features: ${featureIdsToHandoff.join(", ")}`,
+        activeTaskIndex: 0,
       },
       branchName: `design-${plannerThreadId.slice(0, 8)}`,
       workspacePath,
@@ -142,13 +141,6 @@ export async function handoffToPlanner(
       featureIds: featureIdsToHandoff,
       dependencyCount: featureDependencies.length,
     });
-
-    const handoffResult: DesignHandoffResult = {
-      plannerThreadId,
-      runId: run.run_id,
-      featureIds: featureIdsToHandoff,
-      featureGraph: reconciledGraph,
-    };
 
     const successMessage = `Successfully handed off ${featureIdsToHandoff.length} feature(s) to planner.
 
