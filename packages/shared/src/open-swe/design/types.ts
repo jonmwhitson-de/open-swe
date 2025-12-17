@@ -44,10 +44,24 @@ export const DesignSessionStateSchema = z.object({
   lastActivity: z.string(),
 });
 
-const isIterable = (value: unknown): value is Iterable<unknown> =>
-  typeof value === "object" &&
-  value !== null &&
-  typeof (value as Iterable<unknown>)[Symbol.iterator] === "function";
+/**
+ * Change history entry schema.
+ */
+export const ChangeHistoryEntrySchema = z.object({
+  proposalId: z.string(),
+  action: z.string(),
+  timestamp: z.string(),
+  summary: z.string(),
+});
+
+/**
+ * Impact analysis result schema.
+ */
+export const ImpactAnalysisResultSchema = z.object({
+  affectedFeatures: z.array(z.string()),
+  severity: z.enum(["none", "low", "medium", "high"]),
+  description: z.string(),
+});
 
 /**
  * State schema for the dedicated Design Thread.
@@ -66,7 +80,8 @@ export const DesignGraphStateObj = MessagesZodState.extend({
   workspacePath: withLangGraph(z.string().optional(), {
     reducer: {
       schema: z.string().optional(),
-      fn: (_state, update) => update ?? _state,
+      fn: (state: string | undefined, update: string | undefined) =>
+        update ?? state,
     },
   }),
 
@@ -78,16 +93,13 @@ export const DesignGraphStateObj = MessagesZodState.extend({
   /**
    * The current feature graph being designed.
    */
-  featureGraph: withLangGraph<
-    FeatureGraph | undefined,
-    FeatureGraph | undefined,
-    z.ZodType<FeatureGraph | undefined>
-  >(z.custom<FeatureGraph>((value) => value instanceof FeatureGraph).optional(), {
+  featureGraph: withLangGraph(z.custom<FeatureGraph>().optional(), {
     reducer: {
-      schema: z.custom<FeatureGraph | undefined>((value) =>
-        value === undefined || value instanceof FeatureGraph,
-      ),
-      fn: (state, update) => {
+      schema: z.custom<FeatureGraph>().optional(),
+      fn: (
+        state: FeatureGraph | undefined,
+        update: FeatureGraph | undefined,
+      ): FeatureGraph | undefined => {
         if (!update) return state;
         if (!(update instanceof FeatureGraph)) return state;
         return update;
@@ -100,20 +112,11 @@ export const DesignGraphStateObj = MessagesZodState.extend({
    */
   readyFeatureIds: withLangGraph(z.array(z.string()).optional(), {
     reducer: {
-      schema: z.custom<Iterable<unknown> | undefined>(),
-      fn: (state, update) => {
-        if (update === undefined || update === null) return state;
-        if (!isIterable(update) || typeof update === "string") return state;
-
-        const normalized: string[] = [];
-        for (const value of update) {
-          if (typeof value === "string") {
-            normalized.push(value);
-          }
-        }
-
-        return normalized;
-      },
+      schema: z.array(z.string()).optional(),
+      fn: (
+        state: string[] | undefined,
+        update: string[] | undefined,
+      ): string[] | undefined => update ?? state,
     },
   }),
 
@@ -135,21 +138,12 @@ export const DesignGraphStateObj = MessagesZodState.extend({
   /**
    * History of all approved changes for audit trail.
    */
-  changeHistory: z.array(z.object({
-    proposalId: z.string(),
-    action: z.string(),
-    timestamp: z.string(),
-    summary: z.string(),
-  })).optional(),
+  changeHistory: z.array(ChangeHistoryEntrySchema).optional(),
 
   /**
    * Impact analysis results for proposed changes.
    */
-  impactAnalysis: z.record(z.string(), z.object({
-    affectedFeatures: z.array(z.string()),
-    severity: z.enum(["none", "low", "medium", "high"]),
-    description: z.string(),
-  })).optional(),
+  impactAnalysis: z.record(z.string(), ImpactAnalysisResultSchema).optional(),
 });
 
 export type DesignGraphState = z.infer<typeof DesignGraphStateObj>;
