@@ -342,14 +342,15 @@ ${state.designSession?.conversationSummary ? `Summary: ${state.designSession.con
             group: args.group,
           };
 
-          const nodes = new Map(updatedGraph.toJSON().nodes.map(n => [n.id, n]));
+          const graphData = updatedGraph.toJSON();
+          const nodes = new Map(graphData.nodes);
           nodes.set(args.featureId, newFeature);
 
           updatedGraph = new FeatureGraph({
-            version: updatedGraph.toJSON().version,
+            version: graphData.version,
             nodes,
-            edges: updatedGraph.toJSON().edges,
-            artifacts: updatedGraph.toJSON().artifacts,
+            edges: graphData.edges,
+            artifacts: graphData.artifacts,
           });
 
           await persistFeatureGraph(updatedGraph, state.workspacePath);
@@ -404,14 +405,15 @@ ${state.designSession?.conversationSummary ? `Summary: ${state.designSession.con
             ...(args.group && { group: args.group }),
           };
 
-          const nodes = new Map(updatedGraph.toJSON().nodes.map(n => [n.id, n]));
+          const graphData = updatedGraph.toJSON();
+          const nodes = new Map(graphData.nodes);
           nodes.set(args.featureId, updatedFeature);
 
           updatedGraph = new FeatureGraph({
-            version: updatedGraph.toJSON().version,
+            version: graphData.version,
             nodes,
-            edges: updatedGraph.toJSON().edges,
-            artifacts: updatedGraph.toJSON().artifacts,
+            edges: graphData.edges,
+            artifacts: graphData.artifacts,
           });
 
           await persistFeatureGraph(updatedGraph, state.workspacePath);
@@ -464,11 +466,12 @@ ${state.designSession?.conversationSummary ? `Summary: ${state.designSession.con
             type: args.connectionType,
           };
 
+          const graphData = updatedGraph.toJSON();
           updatedGraph = new FeatureGraph({
-            version: updatedGraph.toJSON().version,
-            nodes: new Map(updatedGraph.toJSON().nodes.map(n => [n.id, n])),
+            version: graphData.version,
+            nodes: new Map(graphData.nodes),
             edges: [...existingEdges, newEdge],
-            artifacts: updatedGraph.toJSON().artifacts,
+            artifacts: graphData.artifacts,
           });
 
           await persistFeatureGraph(updatedGraph, state.workspacePath);
@@ -505,11 +508,12 @@ ${state.designSession?.conversationSummary ? `Summary: ${state.designSession.con
             break;
           }
 
+          const graphData = updatedGraph.toJSON();
           updatedGraph = new FeatureGraph({
-            version: updatedGraph.toJSON().version,
-            nodes: new Map(updatedGraph.toJSON().nodes.map(n => [n.id, n])),
+            version: graphData.version,
+            nodes: new Map(graphData.nodes),
             edges: filteredEdges,
-            artifacts: updatedGraph.toJSON().artifacts,
+            artifacts: graphData.artifacts,
           });
 
           await persistFeatureGraph(updatedGraph, state.workspacePath);
@@ -544,13 +548,14 @@ ${state.designSession?.conversationSummary ? `Summary: ${state.designSession.con
               // Update feature status to active
               const feature = updatedGraph.getFeature(featureId);
               if (feature) {
-                const nodes = new Map(updatedGraph.toJSON().nodes.map(n => [n.id, n]));
+                const graphData = updatedGraph.toJSON();
+                const nodes = new Map(graphData.nodes);
                 nodes.set(featureId, { ...feature, status: "active" });
                 updatedGraph = new FeatureGraph({
-                  version: updatedGraph.toJSON().version,
+                  version: graphData.version,
                   nodes,
-                  edges: updatedGraph.toJSON().edges,
-                  artifacts: updatedGraph.toJSON().artifacts,
+                  edges: graphData.edges,
+                  artifacts: graphData.artifacts,
                 });
               }
             } else {
