@@ -3,9 +3,6 @@ import { Client } from "@langchain/langgraph-sdk";
 import { LOCAL_MODE_HEADER } from "@openswe/shared/constants";
 import type { ManagerGraphState } from "@openswe/shared/open-swe/manager/types";
 import { coerceFeatureGraph } from "@/lib/coerce-feature-graph";
-import { createLogger, LogLevel } from "@openswe/shared/logger";
-
-const logger = createLogger(LogLevel.INFO, "FeatureGraphStateRoute");
 
 function resolveApiUrl(): string {
   return (
@@ -51,7 +48,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .getState<ManagerGraphState>(threadId)
       .catch((error) => {
         const status = (error as { status?: number })?.status ?? 500;
-        logger.error("Failed to load manager state for feature graph", {
+        console.error("[feature-graph/state] Failed to load manager state:", {
           threadId,
           status,
           error,
@@ -107,7 +104,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to retrieve feature graph state";
-    logger.error("Feature graph state retrieval failed", { error });
+    console.error("[feature-graph/state] Retrieval failed:", error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -142,7 +139,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .getState<ManagerGraphState>(threadId)
       .catch((error) => {
         const status = (error as { status?: number })?.status ?? 500;
-        logger.error("Failed to load manager state for feature graph", {
+        console.error("[feature-graph/state] Failed to load manager state:", {
           threadId,
           status,
           error,
@@ -198,7 +195,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to retrieve feature graph state";
-    logger.error("Feature graph state retrieval failed", { error });
+    console.error("[feature-graph/state] Retrieval failed:", error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
