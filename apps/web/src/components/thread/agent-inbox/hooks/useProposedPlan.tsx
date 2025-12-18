@@ -18,7 +18,7 @@ export function useProposedPlan(
     );
   }, [originalPlanItems, planItems]);
 
-  const handleResumePlan = () => {
+  const handleResumePlan = async () => {
     let resume: HumanResponse[];
     if (changesMade) {
       resume = [
@@ -40,18 +40,31 @@ export function useProposedPlan(
         },
       ];
     }
-    stream.submit(
-      {},
-      {
-        command: {
-          resume,
+
+    console.log("[useProposedPlan] Resuming plan with:", {
+      resumeType: resume[0].type,
+      threadId: stream.threadId,
+      hasInterrupt: !!stream.interrupt,
+      isLoading: stream.isLoading,
+    });
+
+    try {
+      await stream.submit(
+        {},
+        {
+          command: {
+            resume,
+          },
+          config: {
+            recursion_limit: 400,
+          },
+          streamResumable: true,
         },
-        config: {
-          recursion_limit: 400,
-        },
-        streamResumable: true,
-      },
-    );
+      );
+      console.log("[useProposedPlan] Plan resume submitted successfully");
+    } catch (error) {
+      console.error("[useProposedPlan] Failed to resume plan:", error);
+    }
   };
 
   const handleRejectPlan = () => {
