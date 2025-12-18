@@ -301,12 +301,20 @@ export function ThreadView({
   }, [displayThread.id]);
 
 
+  const featureRunStreamThreadId = selectedFeatureRunState?.threadId ?? undefined;
+
+  // Log when the threadId for the stream changes
+  useEffect(() => {
+    console.log("[ThreadView] featureRunStream threadId changed:", featureRunStreamThreadId);
+  }, [featureRunStreamThreadId]);
+
   const featureRunStream = useStream<PlannerGraphState>({
     apiUrl: process.env.NEXT_PUBLIC_API_URL,
     assistantId: PLANNER_GRAPH_ID,
     reconnectOnMount: true,
-    threadId: selectedFeatureRunState?.threadId ?? undefined,
+    threadId: featureRunStreamThreadId,
     onCustomEvent: (event) => {
+      console.log("[ThreadView] Received custom event:", event);
       if (isCustomNodeEvent(event) && selectedFeatureId) {
         setFeatureRunEvents((prev) => {
           const existing = prev[selectedFeatureId] ?? [];
@@ -320,12 +328,25 @@ export function ThreadView({
         });
       }
     },
+    onError: (error) => {
+      console.error("[ThreadView] Stream error:", error);
+    },
     fetchStateHistory: false,
     defaultHeaders: { [LOCAL_MODE_HEADER]: "true" },
   });
 
   const joinedFeatureRunId = useRef<string | undefined>(undefined);
   const joinedFeatureThreadId = useRef<string | undefined>(undefined);
+
+  // Log stream state for debugging
+  useEffect(() => {
+    console.log("[ThreadView] featureRunStream state:", {
+      isLoading: featureRunStream.isLoading,
+      error: featureRunStream.error,
+      messagesCount: featureRunStream.messages?.length ?? 0,
+      threadId: featureRunStreamThreadId,
+    });
+  }, [featureRunStream.isLoading, featureRunStream.error, featureRunStream.messages, featureRunStreamThreadId]);
 
   useEffect(() => {
     if (
@@ -342,6 +363,7 @@ export function ThreadView({
       console.log("[ThreadView] Joining feature run stream:", {
         threadId: selectedFeatureRunState.threadId,
         runId: selectedFeatureRunState.runId,
+        streamHookThreadId: featureRunStreamThreadId,
       });
 
       featureRunStream
@@ -361,6 +383,7 @@ export function ThreadView({
     }
   }, [
     featureRunStream,
+    featureRunStreamThreadId,
     selectedFeatureRunState?.runId,
     selectedFeatureRunState?.status,
     selectedFeatureRunState?.threadId,
