@@ -887,18 +887,6 @@ export function ThreadView({
     ? setSelectedFeatureRunEvents
     : setCustomPlannerNodeEvents;
 
-  // Debug: log planner display values
-  console.log("[ThreadView] Planner display:", {
-    selectedFeatureId,
-    hasFeaturePlannerRun,
-    plannerDisplayRunId,
-    plannerDisplayThreadId,
-    plannerDisplayCustomEventsCount: plannerDisplayCustomEvents.length,
-    selectedFeatureRunEventsCount: selectedFeatureRunEvents.length,
-    featureRunEventsKeys: Object.keys(featureRunEvents),
-    isPlannerRunError,
-  });
-
   const shouldShowPlannerCancelButton =
     selectedTab === "planner" &&
     plannerDisplayStream.isLoading &&
@@ -1084,9 +1072,12 @@ export function ThreadView({
                   </CardContent>
                 </Card>
               </TabsContent>
-              <TabsContent value="planner">
-                <Card className="border-border bg-card relative h-full p-0">
-                  <CardContent className="h-full p-0">
+              <TabsContent
+                value="planner"
+                className="flex h-full min-h-0 flex-1 flex-col"
+              >
+                <Card className="border-border bg-card relative flex h-full min-h-0 flex-col p-0">
+                  <CardContent className="h-full min-h-0 flex-1 p-0">
                     <StickToBottom
                       className="absolute inset-0 h-full"
                       initial={true}
@@ -1152,9 +1143,12 @@ export function ThreadView({
                   </CardContent>
                 </Card>
               </TabsContent>
-              <TabsContent value="programmer">
-                <Card className="border-border bg-card relative h-full p-0">
-                  <CardContent className="h-full p-0">
+              <TabsContent
+                value="programmer"
+                className="flex h-full min-h-0 flex-1 flex-col"
+              >
+                <Card className="border-border bg-card relative flex h-full min-h-0 flex-col p-0">
+                  <CardContent className="h-full min-h-0 flex-1 p-0">
                     <StickToBottom
                       className="absolute inset-0 h-full"
                       initial={true}
