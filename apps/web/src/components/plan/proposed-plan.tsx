@@ -43,7 +43,10 @@ export function ProposedPlan({
           </button>
 
           <button
-            onClick={handleResumePlan}
+            onClick={() => {
+              console.log("[ProposedPlan] Continue/Approve button clicked");
+              handleResumePlan();
+            }}
             className="group flex cursor-pointer flex-col items-center gap-2 transition-all"
           >
             <div className="rounded-full border-2 border-dashed border-green-500 p-3 transition-all group-hover:border-solid group-hover:bg-green-50 dark:group-hover:bg-green-950/50">

@@ -590,6 +590,8 @@ export function ThreadView({
 
   const previousProgrammerSession =
     useRef<ManagerGraphState["programmerSession"] | undefined>(undefined);
+
+  // Watch plannerStream for programmer session changes (regular planner flow)
   useEffect(() => {
     const nextProgrammerSession = plannerStream.values.programmerSession;
     const currentProgrammerSession = previousProgrammerSession.current;
@@ -620,6 +622,47 @@ export function ThreadView({
   }, [
     plannerProgrammerRunId,
     plannerProgrammerThreadId,
+    selectedTab,
+  ]);
+
+  // Watch featureRunStream for programmer session changes (feature development flow)
+  const featureRunProgrammerSession = featureRunStream.values?.programmerSession;
+  const featureRunProgrammerRunId = featureRunProgrammerSession?.runId;
+  const featureRunProgrammerThreadId = featureRunProgrammerSession?.threadId;
+
+  useEffect(() => {
+    const nextProgrammerSession = featureRunStream.values?.programmerSession;
+    const currentProgrammerSession = previousProgrammerSession.current;
+
+    if (!nextProgrammerSession?.runId || !nextProgrammerSession.threadId) {
+      return;
+    }
+
+    const hasProgrammerSessionChanged =
+      nextProgrammerSession.runId !== currentProgrammerSession?.runId ||
+      nextProgrammerSession.threadId !== currentProgrammerSession?.threadId;
+
+    if (!hasProgrammerSessionChanged) {
+      return;
+    }
+
+    console.log("[ThreadView] Feature run programmer session changed:", {
+      runId: nextProgrammerSession.runId,
+      threadId: nextProgrammerSession.threadId,
+    });
+
+    previousProgrammerSession.current = nextProgrammerSession;
+    setProgrammerSession?.(nextProgrammerSession);
+
+    // Switch to programmer tab after plan approval in feature development flow
+    if (selectedTab === "planner") {
+      setTimeout(() => {
+        setSelectedTab?.("programmer");
+      }, 2000);
+    }
+  }, [
+    featureRunProgrammerRunId,
+    featureRunProgrammerThreadId,
     selectedTab,
   ]);
 
