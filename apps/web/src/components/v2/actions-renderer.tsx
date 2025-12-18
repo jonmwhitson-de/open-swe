@@ -257,6 +257,7 @@ export function ActionsRenderer<
           interruptValue={stream.interrupt?.value}
           isLastMessage={true}
           thread={stream as UseStream<Record<string, unknown>>}
+          threadId={threadId}
         />
       ) : null}
       {errorState ? (

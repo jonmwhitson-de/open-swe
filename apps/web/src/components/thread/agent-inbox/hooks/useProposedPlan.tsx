@@ -9,6 +9,7 @@ import { StreamMode } from "@langchain/langgraph-sdk";
 export function useProposedPlan(
   originalPlanItems: PlanItem[],
   stream: ReturnType<typeof useStream>,
+  threadId?: string,
 ) {
   const [planItems, setPlanItems] = useState<PlanItem[]>(originalPlanItems);
   const [changesMade, setChangesMade] = useState(false);
@@ -49,8 +50,6 @@ export function useProposedPlan(
         },
       ];
     }
-
-    const threadId = stream.threadId;
 
     console.log("[useProposedPlan] Resuming plan with:", {
       resumeType: resume[0].type,
@@ -113,7 +112,7 @@ export function useProposedPlan(
     } finally {
       setIsSubmitting(false);
     }
-  }, [changesMade, isSubmitting, planItems, stream]);
+  }, [changesMade, isSubmitting, planItems, stream, threadId]);
 
   const handleRejectPlan = () => {
     const resume: HumanResponse[] = [
