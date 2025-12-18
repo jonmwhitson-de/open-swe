@@ -191,18 +191,42 @@ function parseAnthropicStreamedToolCalls(
   });
 }
 
+/**
+ * Extracts tool calls from an AI message, checking both the structured tool_calls
+ * property and the streamed content format (Anthropic tool_use blocks).
+ */
+function getToolCallsFromMessage(m: Message): ToolCall[] {
+  if (!isAIMessageSDK(m)) return [];
+
+  // First check structured tool_calls property
+  if (m.tool_calls && m.tool_calls.length > 0) {
+    return m.tool_calls;
+  }
+
+  // Fallback: parse from content (Anthropic streaming format)
+  if (Array.isArray(m.content)) {
+    const parsed = parseAnthropicStreamedToolCalls(m.content as MessageContentComplex[]);
+    if (parsed.length > 0) {
+      return parsed;
+    }
+  }
+
+  return [];
+}
+
 export function mapToolMessageToActionStepProps(
   message: ToolMessage,
   threadMessages: Message[],
 ): ActionItemProps {
+  // Use helper that checks both tool_calls property and streamed content
   const toolCall: ToolCall | undefined = threadMessages
-    .filter(isAIMessageSDK)
-    .flatMap((m) => m.tool_calls ?? [])
+    .flatMap(getToolCallsFromMessage)
     .find((tc) => tc.id === message.tool_call_id);
 
+  // Find the AI message containing this tool call (check both sources)
   const aiMessage = threadMessages
     .filter(isAIMessageSDK)
-    .find((m) => m.tool_calls?.some((tc) => tc.id === message.tool_call_id));
+    .find((m) => getToolCallsFromMessage(m).some((tc) => tc.id === message.tool_call_id));
   // Get reasoning from either additional_kwargs.reasoning (Azure OpenAI / OpenAI o-series)
   // or from the message content (regular text output)
   const reasoningFromKwargs = aiMessage ? getReasoningFromMessage(aiMessage) : undefined;
