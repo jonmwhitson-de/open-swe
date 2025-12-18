@@ -308,6 +308,9 @@ export function ThreadView({
     console.log("[ThreadView] featureRunStream threadId changed:", featureRunStreamThreadId);
   }, [featureRunStreamThreadId]);
 
+  // Note: We don't pass threadId here initially - instead we use joinStream
+  // This avoids issues with useStream not properly reinitializing when
+  // threadId changes from undefined to a valid UUID
   const featureRunStream = useStream<PlannerGraphState>({
     apiUrl: process.env.NEXT_PUBLIC_API_URL,
     assistantId: PLANNER_GRAPH_ID,
@@ -329,7 +332,7 @@ export function ThreadView({
       }
     },
     onError: (error) => {
-      console.error("[ThreadView] Stream error:", error);
+      console.error("[ThreadView] featureRunStream error:", error);
     },
     fetchStateHistory: false,
     defaultHeaders: { [LOCAL_MODE_HEADER]: "true" },
@@ -356,6 +359,16 @@ export function ThreadView({
       (selectedFeatureRunState.runId !== joinedFeatureRunId.current ||
        selectedFeatureRunState.threadId !== joinedFeatureThreadId.current)
     ) {
+      // Ensure the hook's threadId matches the featureRunState's threadId
+      // If they don't match, the hook hasn't updated yet - wait for next render
+      if (featureRunStreamThreadId !== selectedFeatureRunState.threadId) {
+        console.log("[ThreadView] Waiting for stream hook to update threadId:", {
+          expected: selectedFeatureRunState.threadId,
+          current: featureRunStreamThreadId,
+        });
+        return;
+      }
+
       // Store the current thread/run IDs we're joining
       joinedFeatureRunId.current = selectedFeatureRunState.runId;
       joinedFeatureThreadId.current = selectedFeatureRunState.threadId;
@@ -369,10 +382,19 @@ export function ThreadView({
       featureRunStream
         .joinStream(selectedFeatureRunState.runId)
         .then(() => {
-          console.log("[ThreadView] Successfully joined feature run stream");
+          console.log("[ThreadView] Successfully joined feature run stream:", {
+            threadId: selectedFeatureRunState.threadId,
+            runId: selectedFeatureRunState.runId,
+            streamIsLoading: featureRunStream.isLoading,
+            streamMessagesCount: featureRunStream.messages?.length ?? 0,
+          });
         })
         .catch((err) => {
-          console.error("[ThreadView] Failed to join feature run stream:", err);
+          console.error("[ThreadView] Failed to join feature run stream:", {
+            error: err,
+            threadId: selectedFeatureRunState.threadId,
+            runId: selectedFeatureRunState.runId,
+          });
           // Reset refs so we can retry
           joinedFeatureRunId.current = undefined;
           joinedFeatureThreadId.current = undefined;
