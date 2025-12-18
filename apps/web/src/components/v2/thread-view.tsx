@@ -264,6 +264,12 @@ export function ThreadView({
       ? featureRuns[selectedFeatureId]
       : undefined;
   const isPlannerRunError = selectedFeatureRunState?.status === "error";
+
+  // Use a ref to track the current selectedFeatureId to avoid closure issues in callbacks
+  const selectedFeatureIdRef = useRef(selectedFeatureId);
+  useEffect(() => {
+    selectedFeatureIdRef.current = selectedFeatureId;
+  }, [selectedFeatureId]);
   const plannerRunErrorMessage =
     selectedFeatureRunState?.error ??
     "Feature development run encountered an error.";
@@ -318,16 +324,24 @@ export function ThreadView({
     threadId: featureRunStreamThreadId,
     onCustomEvent: (event) => {
       console.log("[ThreadView] Received custom event:", event);
-      if (isCustomNodeEvent(event) && selectedFeatureId) {
+      // Use ref to get the current selectedFeatureId (avoids closure issues)
+      const currentFeatureId = selectedFeatureIdRef.current;
+      if (isCustomNodeEvent(event) && currentFeatureId) {
+        console.log("[ThreadView] Storing custom event for feature:", currentFeatureId);
         setFeatureRunEvents((prev) => {
-          const existing = prev[selectedFeatureId] ?? [];
+          const existing = prev[currentFeatureId] ?? [];
           if (existing.some((entry) => entry.actionId === event.actionId)) {
             return prev;
           }
           return {
             ...prev,
-            [selectedFeatureId]: [...existing, event],
+            [currentFeatureId]: [...existing, event],
           };
+        });
+      } else {
+        console.log("[ThreadView] NOT storing custom event:", {
+          isCustomNodeEvent: isCustomNodeEvent(event),
+          currentFeatureId,
         });
       }
     },
@@ -916,6 +930,35 @@ export function ThreadView({
   const setPlannerDisplayCustomEvents = hasFeaturePlannerRun
     ? setSelectedFeatureRunEvents
     : setCustomPlannerNodeEvents;
+
+  // Debug: Log planner display values
+  useEffect(() => {
+    console.log("[ThreadView] Planner display values:", {
+      selectedFeatureId,
+      hasFeaturePlannerRun,
+      plannerDisplayRunId,
+      plannerDisplayThreadId,
+      plannerDisplayCustomEventsCount: plannerDisplayCustomEvents.length,
+      selectedFeatureRunEventsCount: selectedFeatureRunEvents.length,
+      featurePlannerRunId,
+      featurePlannerThreadId,
+      selectedFeatureRunState: selectedFeatureRunState ? {
+        threadId: selectedFeatureRunState.threadId,
+        runId: selectedFeatureRunState.runId,
+        status: selectedFeatureRunState.status,
+      } : null,
+    });
+  }, [
+    selectedFeatureId,
+    hasFeaturePlannerRun,
+    plannerDisplayRunId,
+    plannerDisplayThreadId,
+    plannerDisplayCustomEvents,
+    selectedFeatureRunEvents,
+    featurePlannerRunId,
+    featurePlannerThreadId,
+    selectedFeatureRunState,
+  ]);
 
   const shouldShowPlannerCancelButton =
     selectedTab === "planner" &&
