@@ -13,3 +13,33 @@ export function getContentString(content: Message["content"]): string {
     .map((c) => c.text);
   return texts.join(" ");
 }
+
+/**
+ * Extracts reasoning text from a message's additional_kwargs.
+ * This is used for Azure OpenAI / OpenAI o-series models that return reasoning
+ * in additional_kwargs.reasoning.
+ */
+export function getReasoningFromMessage(message: Message): string | undefined {
+  if (!message) return undefined;
+
+  // Check for reasoning in additional_kwargs (Azure OpenAI / OpenAI o-series)
+  const additionalKwargs = (message as any).additional_kwargs;
+  if (additionalKwargs?.reasoning) {
+    return String(additionalKwargs.reasoning);
+  }
+
+  // Check for thinking blocks in content (Anthropic extended thinking)
+  if (Array.isArray(message.content)) {
+    const thinkingBlocks = message.content.filter(
+      (c: any) => c.type === "thinking" || c.type === "reasoning"
+    );
+    if (thinkingBlocks.length > 0) {
+      return thinkingBlocks
+        .map((c: any) => c.thinking || c.reasoning || c.text || "")
+        .filter(Boolean)
+        .join("\n\n");
+    }
+  }
+
+  return undefined;
+}

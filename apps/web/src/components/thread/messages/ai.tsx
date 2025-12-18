@@ -5,7 +5,7 @@ import {
   StreamMode,
   ToolMessage,
 } from "@langchain/langgraph-sdk";
-import { getContentString } from "../utils";
+import { getContentString, getReasoningFromMessage } from "../utils";
 import { MarkdownText } from "../markdown-text";
 import {
   LoadExternalComponent,
@@ -203,9 +203,11 @@ export function mapToolMessageToActionStepProps(
   const aiMessage = threadMessages
     .filter(isAIMessageSDK)
     .find((m) => m.tool_calls?.some((tc) => tc.id === message.tool_call_id));
-  const reasoningText = aiMessage
-    ? getContentString(aiMessage.content)
-    : undefined;
+  // Get reasoning from either additional_kwargs.reasoning (Azure OpenAI / OpenAI o-series)
+  // or from the message content (regular text output)
+  const reasoningFromKwargs = aiMessage ? getReasoningFromMessage(aiMessage) : undefined;
+  const contentText = aiMessage ? getContentString(aiMessage.content) : undefined;
+  const reasoningText = reasoningFromKwargs || contentText;
 
   const status: ActionItemProps["status"] = "done";
   const success = message.status !== "error";
@@ -380,6 +382,8 @@ export function AssistantMessage({
   };
 
   const contentString = getContentString(content);
+  // Get reasoning from additional_kwargs (Azure OpenAI / OpenAI o-series) if available
+  const reasoningString = message ? getReasoningFromMessage(message) : undefined;
   const [hideToolCalls] = useQueryState(
     "hideToolCalls",
     parseAsBoolean.withDefault(false),
@@ -763,7 +767,7 @@ export function AssistantMessage({
           actions={actionItems.filter(
             (item): item is ActionItemProps => item !== undefined,
           )}
-          reasoningText={contentString}
+          reasoningText={reasoningString || contentString}
         />
       </div>
     );
