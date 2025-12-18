@@ -9,6 +9,7 @@ interface InterruptProps {
   hasNoAIOrToolMessages?: boolean;
   forceRenderInterrupt?: boolean;
   thread: ReturnType<typeof useStream>;
+  threadId?: string;
 }
 
 export function Interrupt({
@@ -17,6 +18,7 @@ export function Interrupt({
   hasNoAIOrToolMessages,
   forceRenderInterrupt,
   thread,
+  threadId,
 }: InterruptProps) {
   return (
     <>
@@ -25,6 +27,7 @@ export function Interrupt({
           <ThreadView
             interrupt={interruptValue}
             thread={thread}
+            threadId={threadId}
           />
         )}
       {interruptValue &&

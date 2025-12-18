@@ -7,9 +7,11 @@ import { X, ArrowRight } from "lucide-react";
 export function ProposedPlan({
   originalPlanItems,
   stream,
+  threadId,
 }: {
   originalPlanItems: PlanItem[];
   stream: ReturnType<typeof useStream>;
+  threadId?: string;
 }) {
   const {
     planItems,
@@ -17,7 +19,7 @@ export function ProposedPlan({
     changesMade,
     handleResumePlan,
     handleRejectPlan,
-  } = useProposedPlan(originalPlanItems, stream);
+  } = useProposedPlan(originalPlanItems, stream, threadId);
 
   if (!planItems.length) return null;
 

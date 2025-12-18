@@ -9,9 +9,10 @@ import { useStream } from "@langchain/langgraph-sdk/react";
 interface ThreadViewProps {
   interrupt: HumanInterrupt | HumanInterrupt[];
   thread: ReturnType<typeof useStream>;
+  threadId?: string;
 }
 
-export function ThreadView({ interrupt, thread }: ThreadViewProps) {
+export function ThreadView({ interrupt, thread, threadId }: ThreadViewProps) {
   const interruptObj = Array.isArray(interrupt) ? interrupt[0] : interrupt;
   const [showDescription, setShowDescription] = useState(false);
   const [showState, setShowState] = useState(false);
@@ -43,6 +44,7 @@ export function ThreadView({ interrupt, thread }: ThreadViewProps) {
       <ProposedPlan
         originalPlanItems={planItems}
         stream={thread}
+        threadId={threadId}
       />
     );
   }
