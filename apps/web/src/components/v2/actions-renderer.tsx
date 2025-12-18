@@ -107,16 +107,6 @@ export function ActionsRenderer<
   const [streamLoading, setStreamLoading] = useState(stream.isLoading);
   const [errorState, setErrorState] = useState<ErrorState | null>(null);
 
-  // Debug logging
-  console.log("[ActionsRenderer] Props:", {
-    runId,
-    threadId,
-    customNodeEventsCount: customNodeEvents.length,
-    customNodeEvents: customNodeEvents.map(e => ({ nodeId: e.nodeId, actionId: e.actionId })),
-    streamMessagesCount: stream.messages?.length ?? 0,
-    streamIsLoading: stream.isLoading,
-  });
-
   const initializeEvents = useMemo(
     () =>
       customNodeEvents.filter(
@@ -219,16 +209,6 @@ export function ActionsRenderer<
       setErrorState(null);
     }
   }, [stream.error]);
-
-  // Debug: log render decision
-  console.log("[ActionsRenderer] Render decision:", {
-    streamLoading,
-    errorState: !!errorState,
-    initializeEventsCount: initializeEvents.length,
-    stepsCount: steps.length,
-    filteredMessagesCount: filteredMessages?.length ?? 0,
-    acceptedPlanEventsCount: acceptedPlanEvents.length,
-  });
 
   if (streamLoading && !errorState) {
     return <LoadingActionsCardContent />;
