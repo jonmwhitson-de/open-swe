@@ -965,13 +965,13 @@ export function ThreadView({
         />
         {/* Right Side - Actions & Plan */}
         <div
-          className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pt-4"
+          className="flex min-h-0 flex-1 flex-col gap-4 px-4 pt-4"
           style={{ height: "calc(100vh - 3rem)" }}
         >
-          <div className="min-h-0 flex-1">
+          <div className="min-h-0 flex-1 flex flex-col h-full">
             <Tabs
               defaultValue="feature-graph"
-              className="flex w-full flex-1 flex-col"
+              className="flex w-full flex-1 flex-col h-full"
               value={selectedTab}
               onValueChange={(value) => {
                 if (isThreadTab(value)) {
