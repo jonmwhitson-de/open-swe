@@ -18,7 +18,6 @@ import type {
 } from "@openswe/shared/open-swe/manager/types";
 import type { PlannerGraphUpdate } from "@openswe/shared/open-swe/planner/types";
 import type { GraphConfig } from "@openswe/shared/open-swe/types";
-import { HumanMessage } from "@langchain/core/messages";
 import { getCustomConfigurableFields } from "@openswe/shared/open-swe/utils/config";
 import { coerceFeatureGraph } from "@/lib/coerce-feature-graph";
 
@@ -50,10 +49,16 @@ function getFeatureDependencies(graph: FeatureGraph, featureId: string): Feature
   return dependencies;
 }
 
+type PlainHumanMessage = {
+  type: "human";
+  content: string;
+  id?: string;
+};
+
 function buildFeatureImplementationMessage(
   feature: FeatureNode,
   dependencies: FeatureNode[],
-): HumanMessage {
+): PlainHumanMessage {
   const parts: string[] = [];
 
   parts.push(`Implement the following feature:\n`);
@@ -94,10 +99,11 @@ function buildFeatureImplementationMessage(
     }
   }
 
-  return new HumanMessage({
+  return {
+    type: "human",
     content: parts.join("\n"),
     id: randomUUID(),
-  });
+  };
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -221,7 +227,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       programmerSession: managerState.programmerSession,
       // Pass a single message describing the feature to implement
       // instead of the full chat history
-      messages: [featureMessage],
+      messages: [featureMessage] as any, // Type coercion needed for plain message format
     };
 
     const plannerRunConfigurableBase = {
