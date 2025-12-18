@@ -309,11 +309,6 @@ export function ThreadView({
 
   const featureRunStreamThreadId = selectedFeatureRunState?.threadId ?? undefined;
 
-  // Log when the threadId for the stream changes
-  useEffect(() => {
-    console.log("[ThreadView] featureRunStream threadId changed:", featureRunStreamThreadId);
-  }, [featureRunStreamThreadId]);
-
   // Note: We don't pass threadId here initially - instead we use joinStream
   // This avoids issues with useStream not properly reinitializing when
   // threadId changes from undefined to a valid UUID
@@ -323,11 +318,9 @@ export function ThreadView({
     reconnectOnMount: true,
     threadId: featureRunStreamThreadId,
     onCustomEvent: (event) => {
-      console.log("[ThreadView] Received custom event:", event);
       // Use ref to get the current selectedFeatureId (avoids closure issues)
       const currentFeatureId = selectedFeatureIdRef.current;
       if (isCustomNodeEvent(event) && currentFeatureId) {
-        console.log("[ThreadView] Storing custom event for feature:", currentFeatureId);
         setFeatureRunEvents((prev) => {
           const existing = prev[currentFeatureId] ?? [];
           if (existing.some((entry) => entry.actionId === event.actionId)) {
@@ -337,11 +330,6 @@ export function ThreadView({
             ...prev,
             [currentFeatureId]: [...existing, event],
           };
-        });
-      } else {
-        console.log("[ThreadView] NOT storing custom event:", {
-          isCustomNodeEvent: isCustomNodeEvent(event),
-          currentFeatureId,
         });
       }
     },
@@ -355,16 +343,6 @@ export function ThreadView({
   const joinedFeatureRunId = useRef<string | undefined>(undefined);
   const joinedFeatureThreadId = useRef<string | undefined>(undefined);
 
-  // Log stream state for debugging
-  useEffect(() => {
-    console.log("[ThreadView] featureRunStream state:", {
-      isLoading: featureRunStream.isLoading,
-      error: featureRunStream.error,
-      messagesCount: featureRunStream.messages?.length ?? 0,
-      threadId: featureRunStreamThreadId,
-    });
-  }, [featureRunStream.isLoading, featureRunStream.error, featureRunStream.messages, featureRunStreamThreadId]);
-
   useEffect(() => {
     if (
       selectedFeatureRunState?.status === "running" &&
@@ -376,10 +354,6 @@ export function ThreadView({
       // Ensure the hook's threadId matches the featureRunState's threadId
       // If they don't match, the hook hasn't updated yet - wait for next render
       if (featureRunStreamThreadId !== selectedFeatureRunState.threadId) {
-        console.log("[ThreadView] Waiting for stream hook to update threadId:", {
-          expected: selectedFeatureRunState.threadId,
-          current: featureRunStreamThreadId,
-        });
         return;
       }
 
@@ -387,28 +361,9 @@ export function ThreadView({
       joinedFeatureRunId.current = selectedFeatureRunState.runId;
       joinedFeatureThreadId.current = selectedFeatureRunState.threadId;
 
-      console.log("[ThreadView] Joining feature run stream:", {
-        threadId: selectedFeatureRunState.threadId,
-        runId: selectedFeatureRunState.runId,
-        streamHookThreadId: featureRunStreamThreadId,
-      });
-
       featureRunStream
         .joinStream(selectedFeatureRunState.runId)
-        .then(() => {
-          console.log("[ThreadView] Successfully joined feature run stream:", {
-            threadId: selectedFeatureRunState.threadId,
-            runId: selectedFeatureRunState.runId,
-            streamIsLoading: featureRunStream.isLoading,
-            streamMessagesCount: featureRunStream.messages?.length ?? 0,
-          });
-        })
-        .catch((err) => {
-          console.error("[ThreadView] Failed to join feature run stream:", {
-            error: err,
-            threadId: selectedFeatureRunState.threadId,
-            runId: selectedFeatureRunState.runId,
-          });
+        .catch(() => {
           // Reset refs so we can retry
           joinedFeatureRunId.current = undefined;
           joinedFeatureThreadId.current = undefined;
@@ -930,35 +885,6 @@ export function ThreadView({
   const setPlannerDisplayCustomEvents = hasFeaturePlannerRun
     ? setSelectedFeatureRunEvents
     : setCustomPlannerNodeEvents;
-
-  // Debug: Log planner display values
-  useEffect(() => {
-    console.log("[ThreadView] Planner display values:", {
-      selectedFeatureId,
-      hasFeaturePlannerRun,
-      plannerDisplayRunId,
-      plannerDisplayThreadId,
-      plannerDisplayCustomEventsCount: plannerDisplayCustomEvents.length,
-      selectedFeatureRunEventsCount: selectedFeatureRunEvents.length,
-      featurePlannerRunId,
-      featurePlannerThreadId,
-      selectedFeatureRunState: selectedFeatureRunState ? {
-        threadId: selectedFeatureRunState.threadId,
-        runId: selectedFeatureRunState.runId,
-        status: selectedFeatureRunState.status,
-      } : null,
-    });
-  }, [
-    selectedFeatureId,
-    hasFeaturePlannerRun,
-    plannerDisplayRunId,
-    plannerDisplayThreadId,
-    plannerDisplayCustomEvents,
-    selectedFeatureRunEvents,
-    featurePlannerRunId,
-    featurePlannerThreadId,
-    selectedFeatureRunState,
-  ]);
 
   const shouldShowPlannerCancelButton =
     selectedTab === "planner" &&
