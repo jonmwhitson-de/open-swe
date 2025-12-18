@@ -227,6 +227,11 @@ export function ThreadView({
       isGeneratingGraph: state.isGeneratingGraph,
     })),
   );
+
+  // Ref to track current selectedFeatureId - used in callbacks to avoid closure issues
+  const selectedFeatureIdRef = useRef(selectedFeatureId);
+  selectedFeatureIdRef.current = selectedFeatureId;
+
   const [featureRunEvents, setFeatureRunEvents] = useState<
     Record<string, CustomNodeEvent[]>
   >({});
@@ -245,18 +250,20 @@ export function ThreadView({
         | CustomNodeEvent[]
         | ((events: CustomNodeEvent[]) => CustomNodeEvent[]),
     ) => {
-      if (!selectedFeatureId) return;
+      // Use ref to get current selectedFeatureId (avoids closure issues)
+      const currentFeatureId = selectedFeatureIdRef.current;
+      if (!currentFeatureId) return;
 
       setFeatureRunEvents((prev) => {
-        const current = prev[selectedFeatureId] ?? [];
+        const current = prev[currentFeatureId] ?? [];
         const next = typeof updater === "function" ? updater(current) : updater;
         return {
           ...prev,
-          [selectedFeatureId]: next,
+          [currentFeatureId]: next,
         };
       });
     },
-    [selectedFeatureId],
+    [], // No dependencies - uses ref
   );
 
   const selectedFeatureRunState =
@@ -264,12 +271,6 @@ export function ThreadView({
       ? featureRuns[selectedFeatureId]
       : undefined;
   const isPlannerRunError = selectedFeatureRunState?.status === "error";
-
-  // Use a ref to track the current selectedFeatureId to avoid closure issues in callbacks
-  const selectedFeatureIdRef = useRef(selectedFeatureId);
-  useEffect(() => {
-    selectedFeatureIdRef.current = selectedFeatureId;
-  }, [selectedFeatureId]);
   const plannerRunErrorMessage =
     selectedFeatureRunState?.error ??
     "Feature development run encountered an error.";
