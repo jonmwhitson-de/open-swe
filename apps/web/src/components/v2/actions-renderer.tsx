@@ -110,7 +110,7 @@ export function ActionsRenderer<
   const initializeEvents = useMemo(
     () =>
       customNodeEvents.filter(
-        (e) => e.nodeId === INITIALIZE_NODE_ID && e.data.runId === runId,
+        (e) => e.nodeId === INITIALIZE_NODE_ID && (!runId || !e.data?.runId || e.data.runId === runId),
       ),
     [customNodeEvents, runId],
   );
@@ -118,7 +118,7 @@ export function ActionsRenderer<
   const acceptedPlanEvents = useMemo(
     () =>
       customNodeEvents.filter(
-        (e) => e.nodeId === ACCEPTED_PLAN_NODE_ID && e.data.runId === runId,
+        (e) => e.nodeId === ACCEPTED_PLAN_NODE_ID && (!runId || !e.data?.runId || e.data.runId === runId),
       ),
     [customNodeEvents, runId],
   );
