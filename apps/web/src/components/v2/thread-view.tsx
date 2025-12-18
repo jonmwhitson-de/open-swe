@@ -887,6 +887,18 @@ export function ThreadView({
     ? setSelectedFeatureRunEvents
     : setCustomPlannerNodeEvents;
 
+  // Debug: log planner display values
+  console.log("[ThreadView] Planner display:", {
+    selectedFeatureId,
+    hasFeaturePlannerRun,
+    plannerDisplayRunId,
+    plannerDisplayThreadId,
+    plannerDisplayCustomEventsCount: plannerDisplayCustomEvents.length,
+    selectedFeatureRunEventsCount: selectedFeatureRunEvents.length,
+    featureRunEventsKeys: Object.keys(featureRunEvents),
+    isPlannerRunError,
+  });
+
   const shouldShowPlannerCancelButton =
     selectedTab === "planner" &&
     plannerDisplayStream.isLoading &&
