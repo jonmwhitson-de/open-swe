@@ -18,6 +18,7 @@ import type {
 } from "@openswe/shared/open-swe/manager/types";
 import type { PlannerGraphUpdate } from "@openswe/shared/open-swe/planner/types";
 import type { GraphConfig } from "@openswe/shared/open-swe/types";
+import { HumanMessage } from "@langchain/core/messages";
 import { getCustomConfigurableFields } from "@openswe/shared/open-swe/utils/config";
 import { coerceFeatureGraph } from "@/lib/coerce-feature-graph";
 
@@ -47,6 +48,56 @@ function getFeatureDependencies(graph: FeatureGraph, featureId: string): Feature
   }
 
   return dependencies;
+}
+
+function buildFeatureImplementationMessage(
+  feature: FeatureNode,
+  dependencies: FeatureNode[],
+): HumanMessage {
+  const parts: string[] = [];
+
+  parts.push(`Implement the following feature:\n`);
+  parts.push(`**Feature: ${feature.name}**`);
+  parts.push(`ID: ${feature.id}`);
+  parts.push(`Description: ${feature.description}`);
+
+  if (feature.status) {
+    parts.push(`Status: ${feature.status}`);
+  }
+
+  if (feature.group) {
+    parts.push(`Group: ${feature.group}`);
+  }
+
+  if (feature.artifacts) {
+    const artifactsList = Array.isArray(feature.artifacts)
+      ? feature.artifacts
+      : Object.values(feature.artifacts);
+    if (artifactsList.length > 0) {
+      parts.push(`\nRelated artifacts:`);
+      for (const artifact of artifactsList) {
+        if (typeof artifact === "string") {
+          parts.push(`- ${artifact}`);
+        } else if (artifact.path) {
+          parts.push(`- ${artifact.path}${artifact.description ? `: ${artifact.description}` : ""}`);
+        } else if (artifact.name) {
+          parts.push(`- ${artifact.name}${artifact.description ? `: ${artifact.description}` : ""}`);
+        }
+      }
+    }
+  }
+
+  if (dependencies.length > 0) {
+    parts.push(`\nRelated features to consider:`);
+    for (const dep of dependencies) {
+      parts.push(`- ${dep.name}: ${dep.description}`);
+    }
+  }
+
+  return new HumanMessage({
+    content: parts.join("\n"),
+    id: randomUUID(),
+  });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -149,6 +200,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       featureId,
     );
 
+    // Create an initial message that describes the feature to implement
+    const featureMessage = buildFeatureImplementationMessage(
+      selectedFeature,
+      featureDependencies,
+    );
+
     const plannerRunInput: PlannerGraphUpdate = {
       issueId: managerState.issueId,
       targetRepository: managerState.targetRepository,
@@ -162,9 +219,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       featureDependencyMap: dependencyMap,
       featureDescription: clarifyFeatureDescription(selectedFeature),
       programmerSession: managerState.programmerSession,
-      // Don't pass the full chat history - the planner should focus on the
-      // selected feature's description, not previous conversations
-      messages: [],
+      // Pass a single message describing the feature to implement
+      // instead of the full chat history
+      messages: [featureMessage],
     };
 
     const plannerRunConfigurableBase = {
