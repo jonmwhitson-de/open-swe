@@ -162,7 +162,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       featureDependencyMap: dependencyMap,
       featureDescription: clarifyFeatureDescription(selectedFeature),
       programmerSession: managerState.programmerSession,
-      messages: managerState.messages,
+      // Don't pass the full chat history - the planner should focus on the
+      // selected feature's description, not previous conversations
+      messages: [],
     };
 
     const plannerRunConfigurableBase = {
