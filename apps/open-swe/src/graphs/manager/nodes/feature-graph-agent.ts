@@ -11,7 +11,6 @@ import {
 import { loadModel, supportsParallelToolCallsParam } from "../../../utils/llms/index.js";
 import { LLMTask } from "@openswe/shared/open-swe/llm-task";
 import {
-  AIMessage,
   BaseMessage,
   ToolMessage,
   isHumanMessage,
