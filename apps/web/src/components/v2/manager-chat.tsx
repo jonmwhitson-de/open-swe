@@ -1,5 +1,6 @@
 import { ScrollToBottom, StickyToBottomContent } from "@/utils/scroll-utils";
-import { Message, useStream } from "@langchain/langgraph-sdk/react";
+import { Message } from "@langchain/langgraph-sdk";
+import { useStream } from "@langchain/langgraph-sdk/react";
 import { getMessageContentString } from "@/lib/get-message-content-string";
 import { useState } from "react";
 import { StickToBottom } from "use-stick-to-bottom";
