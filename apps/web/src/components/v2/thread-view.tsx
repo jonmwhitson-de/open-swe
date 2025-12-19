@@ -921,6 +921,30 @@ export function ThreadView({
     }
   };
 
+  // Lock in feature - tells the system the user has provided enough detail
+  const handleLockInFeature = () => {
+    const lockInMessage = new HumanMessage({
+      id: uuidv4(),
+      content: "[LOCK_IN_FEATURE] I have provided enough detail. Please proceed with the feature as described without asking more clarifying questions.",
+      additional_kwargs: {
+        requestSource: "open-swe",
+        lockInFeature: true,
+      },
+    });
+    stream.submit(
+      {
+        messages: [lockInMessage],
+      },
+      {
+        streamResumable: true,
+        optimisticValues: (prev) => ({
+          ...prev,
+          messages: [...(prev.messages ?? []), lockInMessage],
+        }),
+      },
+    );
+  };
+
   const filteredMessages = stream.messages.filter((message) => {
     return !message.id?.startsWith(DO_NOT_RENDER_ID_PREFIX);
   });
@@ -1039,6 +1063,7 @@ export function ThreadView({
           programmerThreadId={programmerSession?.threadId}
           disableSubmit={shouldDisableManagerInput}
           stream={stream}
+          onLockInFeature={handleLockInFeature}
         />
         {/* Right Side - Actions & Plan */}
         <div
