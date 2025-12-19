@@ -14,6 +14,12 @@ export const BASE_CLASSIFICATION_SCHEMA = z.object({
   route: z
     .enum(["no_op"])
     .describe("The route to take to handle the user's new message."),
+  needs_user_clarification: z
+    .boolean()
+    .optional()
+    .describe(
+      "Set to true if your response asks the user a clarifying question and you need their answer before proceeding. When true, the system will wait for the user's response before continuing. Use this when you need more information about requirements, scope, or implementation details.",
+    ),
 });
 
 export function createClassificationSchema(enumOptions: [string, ...string[]]) {
