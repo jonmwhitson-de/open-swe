@@ -1005,6 +1005,7 @@ export function ThreadView({
           plannerThreadId={plannerSession?.threadId}
           programmerThreadId={programmerSession?.threadId}
           disableSubmit={shouldDisableManagerInput}
+          stream={stream}
         />
         {/* Right Side - Actions & Plan */}
         <div

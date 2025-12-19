@@ -1,5 +1,5 @@
 import { ScrollToBottom, StickyToBottomContent } from "@/utils/scroll-utils";
-import { Message } from "@langchain/langgraph-sdk";
+import { Message, useStream } from "@langchain/langgraph-sdk/react";
 import { getMessageContentString } from "@/lib/get-message-content-string";
 import { useState } from "react";
 import { StickToBottom } from "use-stick-to-bottom";
@@ -16,6 +16,8 @@ import { Loader2 } from "lucide-react";
 import { parsePartialJson } from "@langchain/core/output_parsers";
 import { RestartRun } from "./restart-run";
 import { useUser } from "@/hooks/useUser";
+import { Interrupt } from "../thread/messages/interrupt";
+import { ManagerGraphState } from "@openswe/shared/open-swe/manager/types";
 
 function MessageCopyButton({ content }: { content: string }) {
   const [copied, setCopied] = useState(false);
@@ -78,6 +80,8 @@ interface ManagerChatProps {
   plannerThreadId?: string;
   programmerThreadId?: string;
   disableSubmit?: boolean;
+  // Stream for interrupt handling
+  stream?: ReturnType<typeof useStream<ManagerGraphState>>;
 }
 
 function extractResponseFromMessage(message: Message): string {
@@ -167,8 +171,11 @@ export function ManagerChat({
   plannerThreadId,
   programmerThreadId,
   disableSubmit,
+  stream,
 }: ManagerChatProps) {
   const { user } = useUser();
+  const hasInterrupt = Boolean(stream?.interrupt);
+  const interruptValue = stream?.interrupt?.value;
   return (
     <div className="border-border bg-muted/30 flex h-full w-1/3 flex-col overflow-hidden border-r">
       <div className="relative flex-1">
@@ -232,6 +239,18 @@ export function ManagerChat({
                     </div>
                   );
                 })}
+                {/* Show interrupt UI if there's an interrupt from design agent */}
+                {hasInterrupt && stream && (
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/50">
+                    <Interrupt
+                      interruptValue={interruptValue}
+                      isLastMessage={true}
+                      forceRenderInterrupt={true}
+                      thread={stream as ReturnType<typeof useStream<Record<string, unknown>>>}
+                      threadId={managerThreadId}
+                    />
+                  </div>
+                )}
                 {errorState ? (
                   <CollapsibleAlert
                     variant="destructive"
