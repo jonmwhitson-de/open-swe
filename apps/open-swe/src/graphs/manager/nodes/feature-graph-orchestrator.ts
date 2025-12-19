@@ -292,11 +292,25 @@ export async function featureGraphOrchestrator(
 
   const updates: ManagerGraphUpdate = {};
 
-  const agentMessages = coerceMessages(plannerValues?.messages);
+  // Only include the explicit response message, not all intermediate messages
+  // The planner's internal conversation (AI + tool messages) should stay internal
+  // to avoid showing duplicate content in the manager chat
   const responseMessages = coerceMessages(
     plannerValues?.response ? [plannerValues.response] : [],
   );
-  const messages = [...agentMessages, ...responseMessages];
+
+  // Fallback: if no explicit response, use only the last AI message from the planner
+  // to avoid showing intermediate tool call/result pairs
+  const agentMessages = coerceMessages(plannerValues?.messages);
+  const lastAIMessage = agentMessages
+    .filter((msg): msg is AIMessage => msg instanceof AIMessage || (msg as { _getType?: () => string })._getType?.() === 'ai')
+    .pop();
+
+  const messages = responseMessages.length > 0
+    ? responseMessages
+    : lastAIMessage
+      ? [lastAIMessage]
+      : [];
 
   let updatedGraph = coerceFeatureGraph(plannerValues?.featureGraph);
   const normalizedFeatureIds = normalizeFeatureIds(

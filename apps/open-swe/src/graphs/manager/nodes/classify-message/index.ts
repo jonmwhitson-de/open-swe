@@ -16,7 +16,7 @@ import {
   supportsParallelToolCallsParam,
 } from "../../../../utils/llms/index.js";
 import { LLMTask } from "@openswe/shared/open-swe/llm-task";
-import { Command, END } from "@langchain/langgraph";
+import { Command, END, interrupt } from "@langchain/langgraph";
 import { getMessageContentString } from "@openswe/shared/messages";
 import { getIssueService } from "../../../../services/issue-service.js";
 import { createIssueFieldsFromMessages } from "../../utils/generate-issue-fields.js";
@@ -243,6 +243,7 @@ export async function classifyMessage(
     route: string;
     response?: string;
     internal_reasoning?: string;
+    needs_user_clarification?: boolean;
   };
 
   const safeResponse = new AIMessage({
@@ -251,13 +252,49 @@ export async function classifyMessage(
       route: toolCallArgs.route,
       internal_reasoning: toolCallArgs.internal_reasoning,
       phase,
+      needs_user_clarification: toolCallArgs.needs_user_clarification,
     },
   });
 
   logger.info("classifyMessage route", {
     route: toolCallArgs.route,
     phase,
+    needs_user_clarification: toolCallArgs.needs_user_clarification,
   });
+
+  // In design phase, if the manager needs clarification from the user,
+  // use interrupt to pause and wait for user response
+  if (phase === "design" && toolCallArgs.needs_user_clarification) {
+    logger.info("Interrupting for user clarification in design phase");
+
+    // Add the response message to state first so the user sees it
+    const clarificationUpdate: ManagerGraphUpdate = withApproval({
+      messages: [safeResponse],
+    });
+
+    // Interrupt with HumanInterrupt format for proper UI handling
+    interrupt({
+      action_request: {
+        action: "clarify_requirements",
+        args: {
+          question: toolCallArgs.response ?? "Please provide more details.",
+        },
+      },
+      config: {
+        allow_respond: true,
+        allow_accept: false,
+        allow_edit: false,
+        allow_ignore: true,
+      },
+      description: toolCallArgs.response ?? "Please provide more details.",
+    });
+
+    // This return will be reached after the user responds and the graph resumes
+    return new Command({
+      update: clarificationUpdate,
+      goto: "classify-message",
+    });
+  }
 
   if (phase === "design") {
     const allowedDesignRoutes = new Set([
