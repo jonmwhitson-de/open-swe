@@ -359,10 +359,23 @@ ${state.designSession?.conversationSummary ? `Summary: ${state.designSession.con
       },
     };
 
+    // Use proper HumanInterrupt format so frontend shows input field
     interrupt({
-      question: questionText,
-      questionId,
-      relatedFeatureIds: args.relatedFeatureIds,
+      action_request: {
+        action: "ask_clarifying_question",
+        args: {
+          question: questionText,
+          questionId,
+          relatedFeatureIds: args.relatedFeatureIds,
+        },
+      },
+      config: {
+        allow_respond: true,
+        allow_accept: false,
+        allow_edit: false,
+        allow_ignore: true,
+      },
+      description: questionText,
     });
 
     return new Command({
@@ -682,11 +695,23 @@ ${state.designSession?.conversationSummary ? `Summary: ${state.designSession.con
             },
           };
 
-          // Use interrupt to pause and wait for user input
+          // Use proper HumanInterrupt format so frontend shows input field
           interrupt({
-            question: questionText,
-            questionId,
-            relatedFeatureIds: args.relatedFeatureIds,
+            action_request: {
+              action: "ask_clarifying_question",
+              args: {
+                question: questionText,
+                questionId,
+                relatedFeatureIds: args.relatedFeatureIds,
+              },
+            },
+            config: {
+              allow_respond: true,
+              allow_accept: false,
+              allow_edit: false,
+              allow_ignore: true,
+            },
+            description: questionText,
           });
 
           return new Command({
