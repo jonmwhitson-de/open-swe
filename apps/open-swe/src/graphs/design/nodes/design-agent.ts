@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { Command, END } from "@langchain/langgraph";
+import { Command, END, interrupt } from "@langchain/langgraph";
 import { GraphConfig } from "@openswe/shared/open-swe/types";
 import {
   DesignGraphState,
@@ -598,8 +598,9 @@ ${state.designSession?.conversationSummary ? `Summary: ${state.designSession.con
         case "ask_clarifying_question": {
           const args = toolCall.args as z.infer<typeof askClarifyingQuestionSchema>;
 
+          const questionId = randomUUID();
           const question: ClarifyingQuestion = {
-            id: randomUUID(),
+            id: questionId,
             question: args.question,
             context: args.context,
             relatedFeatureIds: args.relatedFeatureIds,
@@ -610,14 +611,36 @@ ${state.designSession?.conversationSummary ? `Summary: ${state.designSession.con
 
           updatedQuestions.push(question);
 
-          let response = `Question: ${args.question}\nContext: ${args.context}`;
+          let questionText = args.question;
+          if (args.context) {
+            questionText += `\n\n${args.context}`;
+          }
           if (args.options && args.options.length > 0) {
-            response += `\nSuggested options:\n${args.options.map((o, i) => `  ${i + 1}. ${o}`).join("\n")}`;
+            questionText += `\n\nOptions:\n${args.options.map((o, i) => `  ${i + 1}. ${o}`).join("\n")}`;
           }
 
-          toolMessages.push(recordAction(toolCall.name, toolCallId, response));
-          userFacingSummaries.push(response);
-          break;
+          // When asking a clarifying question, interrupt and wait for user response
+          // Don't process any more tool calls - wait for the answer first
+          const interruptUpdates: DesignGraphUpdate = {
+            messages: [aiMessage, recordAction(toolCall.name, toolCallId, "Waiting for your response...")],
+            clarifyingQuestions: updatedQuestions,
+            designSession: {
+              ...updatedDesignSession,
+              lastActivity: nowIso(),
+            },
+          };
+
+          // Use interrupt to pause and wait for user input
+          interrupt({
+            question: questionText,
+            questionId,
+            relatedFeatureIds: args.relatedFeatureIds,
+          });
+
+          return new Command({
+            update: interruptUpdates,
+            goto: END,
+          });
         }
 
         case "analyze_impact": {
@@ -703,21 +726,10 @@ ${state.designSession?.conversationSummary ? `Summary: ${state.designSession.con
     }
   }
 
-  // Only create a response message with the user-facing summaries
-  // The original aiMessage content is already included in aiMessage
-  const summaryContent = userFacingSummaries
-    .map((entry) => entry?.trim())
-    .filter((entry): entry is string => Boolean(entry))
-    .join("\n\n");
-
-  // Only add a response message if there are summaries that aren't already in the AI message
-  const aiMessageContent = getMessageContentString(aiMessage.content);
-  const responseMessage = summaryContent && summaryContent !== aiMessageContent
-    ? new AIMessage({ content: summaryContent })
-    : undefined;
-
+  // Don't add a separate responseMessage - the summaries are already in toolMessages
+  // Adding both causes duplicate content in the UI
   const updates: DesignGraphUpdate = {
-    messages: [aiMessage, ...toolMessages, ...(responseMessage ? [responseMessage] : [])],
+    messages: [aiMessage, ...toolMessages],
     featureGraph: updatedGraph,
     pendingProposals: updatedProposals,
     clarifyingQuestions: updatedQuestions,
