@@ -572,21 +572,10 @@ export async function featureGraphAgent(
     }
   }
 
-  // Only create a response message with the user-facing summaries
-  // The original aiMessage content is already included in aiMessage
-  const summaryContent = userFacingSummaries
-    .map((entry) => entry?.trim())
-    .filter((entry): entry is string => Boolean(entry))
-    .join("\n\n");
-
-  // Only add a response message if there are summaries that aren't already in the AI message
-  const aiMessageContent = getMessageContentString(aiMessage.content);
-  const responseMessage = summaryContent && summaryContent !== aiMessageContent
-    ? new AIMessage({ content: summaryContent })
-    : undefined;
-
+  // Don't add a separate responseMessage - the summaries are already in toolMessages
+  // Adding both causes duplicate content in the UI
   const updates: ManagerGraphUpdate = {
-    messages: [aiMessage, ...toolMessages, ...(responseMessage ? [responseMessage] : [])],
+    messages: [aiMessage, ...toolMessages],
     featureProposals: updatedProposals,
     ...(updatedGraph ? { featureGraph: updatedGraph } : {}),
     ...(updatedActiveFeatureIds
