@@ -104,10 +104,18 @@ export async function classifyMessage(
     getMessageContentString(userMessage.content).includes("[LOCK_IN_FEATURE]");
 
   if (isLockInFeature && phase === "design") {
-    logger.info("User locked in feature - proceeding without further clarification");
+    logger.info("User locked in feature - proceeding without further clarification", {
+      hasFeatureGraph: Boolean(state.featureGraph),
+    });
+
+    // If we have a feature graph, route to the orchestrator to finalize it
+    // If we don't have one yet, just acknowledge and end - the UI will trigger generation
+    const hasFeatureGraph = Boolean(state.featureGraph);
 
     const acknowledgmentMessage = new AIMessage({
-      content: "Got it! I'll proceed with the feature as described. Let me finalize the feature graph.",
+      content: hasFeatureGraph
+        ? "Got it! I'll proceed with the feature as described. Let me finalize the feature graph."
+        : "Got it! I've noted your requirements. The feature graph will be generated based on our discussion.",
       additional_kwargs: {
         phase,
         lockInAcknowledged: true,
@@ -119,7 +127,7 @@ export async function classifyMessage(
         messages: [acknowledgmentMessage],
         userHasApprovedFeature: true,
       },
-      goto: "feature-graph-orchestrator",
+      goto: hasFeatureGraph ? "feature-graph-orchestrator" : END,
     });
   }
 
