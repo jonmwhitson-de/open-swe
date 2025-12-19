@@ -208,10 +208,15 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
 
         if (!response.ok) {
           const payload = await response.json().catch(() => null);
+          // API returns errors in 'error' field, not 'message'
           const message =
+            (payload && typeof payload.error === "string"
+              ? payload.error
+              : null) ??
             (payload && typeof payload.message === "string"
               ? payload.message
-              : null) ?? "Failed to generate feature graph";
+              : null) ??
+            "Failed to generate feature graph";
           throw new Error(message);
         }
 
