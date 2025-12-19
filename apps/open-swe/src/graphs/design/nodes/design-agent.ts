@@ -318,6 +318,59 @@ ${state.designSession?.conversationSummary ? `Summary: ${state.designSession.con
   const toolMessages: BaseMessage[] = [];
   const userFacingSummaries: string[] = [];
 
+  // PRIORITY: Check if any tool call is a clarifying question
+  // If so, process ONLY that and interrupt - don't process other tool calls
+  const clarifyingQuestionCall = (aiMessage.tool_calls ?? []).find(
+    (tc) => tc.name === "ask_clarifying_question"
+  );
+
+  if (clarifyingQuestionCall) {
+    const toolCallId = clarifyingQuestionCall.id ?? randomUUID();
+    const args = clarifyingQuestionCall.args as z.infer<typeof askClarifyingQuestionSchema>;
+
+    const questionId = randomUUID();
+    const question: ClarifyingQuestion = {
+      id: questionId,
+      question: args.question,
+      context: args.context,
+      relatedFeatureIds: args.relatedFeatureIds,
+      options: args.options,
+      status: "pending",
+      createdAt: nowIso(),
+    };
+
+    updatedQuestions.push(question);
+
+    let questionText = args.question;
+    if (args.context) {
+      questionText += `\n\n${args.context}`;
+    }
+    if (args.options && args.options.length > 0) {
+      questionText += `\n\nOptions:\n${args.options.map((o, i) => `  ${i + 1}. ${o}`).join("\n")}`;
+    }
+
+    // Interrupt and wait for user response - don't process other tool calls
+    const interruptUpdates: DesignGraphUpdate = {
+      messages: [aiMessage, recordAction(clarifyingQuestionCall.name, toolCallId, "Waiting for your response...")],
+      clarifyingQuestions: updatedQuestions,
+      designSession: {
+        ...updatedDesignSession,
+        lastActivity: nowIso(),
+      },
+    };
+
+    interrupt({
+      question: questionText,
+      questionId,
+      relatedFeatureIds: args.relatedFeatureIds,
+    });
+
+    return new Command({
+      update: interruptUpdates,
+      goto: END,
+    });
+  }
+
   for (const toolCall of aiMessage.tool_calls ?? []) {
     const toolCallId = toolCall.id ?? randomUUID();
 
