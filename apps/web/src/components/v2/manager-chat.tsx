@@ -175,7 +175,7 @@ export function ManagerChat({
 }: ManagerChatProps) {
   const { user } = useUser();
   const hasInterrupt = Boolean(stream?.interrupt);
-  const interruptValue = stream?.interrupt?.value;
+  const interruptValue = stream?.interrupt?.value as { description?: string } | undefined;
   return (
     <div className="border-border bg-muted/30 flex h-full w-1/3 flex-col overflow-hidden border-r">
       <div className="relative flex-1">
