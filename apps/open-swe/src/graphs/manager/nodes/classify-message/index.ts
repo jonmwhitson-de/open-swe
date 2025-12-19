@@ -98,6 +98,31 @@ export async function classifyMessage(
 
   const phase = getPhase(config, userMessage);
 
+  // Check if user clicked "Lock in feature" to skip further clarification questions
+  const isLockInFeature =
+    userMessage.additional_kwargs?.lockInFeature === true ||
+    getMessageContentString(userMessage.content).includes("[LOCK_IN_FEATURE]");
+
+  if (isLockInFeature && phase === "design") {
+    logger.info("User locked in feature - proceeding without further clarification");
+
+    const acknowledgmentMessage = new AIMessage({
+      content: "Got it! I'll proceed with the feature as described. Let me finalize the feature graph.",
+      additional_kwargs: {
+        phase,
+        lockInAcknowledged: true,
+      },
+    });
+
+    return new Command({
+      update: {
+        messages: [acknowledgmentMessage],
+        userHasApprovedFeature: true,
+      },
+      goto: "feature-graph-orchestrator",
+    });
+  }
+
   const userMessageContent = getMessageContentString(userMessage.content);
   const requestSource = userMessage.additional_kwargs?.requestSource;
   const isChatSession =

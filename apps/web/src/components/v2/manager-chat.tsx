@@ -6,7 +6,7 @@ import { useState } from "react";
 import { StickToBottom } from "use-stick-to-bottom";
 import { TooltipIconButton } from "../ui/tooltip-icon-button";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bot, Copy, CopyCheck, ArrowUp, User, AlertCircle, MessageCircleQuestion } from "lucide-react";
+import { Bot, Copy, CopyCheck, ArrowUp, User, AlertCircle, MessageCircleQuestion, CheckCircle2 } from "lucide-react";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
 import { isAIMessageSDK } from "@/lib/langchain-messages";
@@ -82,6 +82,8 @@ interface ManagerChatProps {
   disableSubmit?: boolean;
   // Stream for interrupt handling
   stream?: ReturnType<typeof useStream<ManagerGraphState>>;
+  // Lock in feature callback - signals user is done providing details
+  onLockInFeature?: () => void;
 }
 
 function extractResponseFromMessage(message: Message): string {
@@ -172,6 +174,7 @@ export function ManagerChat({
   programmerThreadId,
   disableSubmit,
   stream,
+  onLockInFeature,
 }: ManagerChatProps) {
   const { user } = useUser();
   const hasInterrupt = Boolean(stream?.interrupt);
@@ -269,13 +272,26 @@ export function ManagerChat({
                       <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/50">
                         <MessageCircleQuestion className="size-4 text-blue-600 dark:text-blue-400" />
                       </div>
-                      <div className="flex-1 space-y-2">
-                        <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                          Waiting for your response
-                        </p>
-                        <p className="text-xs text-blue-600 dark:text-blue-400">
-                          Type your response in the input below to continue.
-                        </p>
+                      <div className="flex-1 space-y-3">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                            Waiting for your response
+                          </p>
+                          <p className="text-xs text-blue-600 dark:text-blue-400">
+                            Type your response in the input below, or lock in the feature if you have enough detail.
+                          </p>
+                        </div>
+                        {onLockInFeature && (
+                          <Button
+                            onClick={onLockInFeature}
+                            size="sm"
+                            variant="outline"
+                            className="border-green-300 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800 dark:border-green-700 dark:bg-green-950/50 dark:text-green-300 dark:hover:bg-green-900/50"
+                          >
+                            <CheckCircle2 className="mr-2 size-4" />
+                            Lock in feature
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
