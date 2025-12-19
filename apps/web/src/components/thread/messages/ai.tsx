@@ -206,7 +206,7 @@ function getToolCallsFromMessage(m: Message): ToolCall[] {
   // Fallback: parse from content (Anthropic streaming format)
   if (Array.isArray(m.content)) {
     const parsed = parseAnthropicStreamedToolCalls(m.content as MessageContentComplex[]);
-    if (parsed.length > 0) {
+    if (parsed && parsed.length > 0) {
       return parsed;
     }
   }
