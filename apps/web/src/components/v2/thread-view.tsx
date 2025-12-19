@@ -65,16 +65,26 @@ const isThreadTab = (value: string): value is ThreadTab =>
   value === "planner" || value === "programmer" || value === "feature-graph";
 
 export const shouldAutoGenerateFeatureGraph = ({
+  managerIsLoading,
   plannerIsLoading,
   programmerIsLoading,
   hasPlannerSession,
   hasProgrammerSession,
+  hasManagerMessages,
 }: {
+  managerIsLoading: boolean;
   plannerIsLoading: boolean;
   programmerIsLoading: boolean;
   hasPlannerSession: boolean;
   hasProgrammerSession: boolean;
+  hasManagerMessages: boolean;
 }) =>
+  // Don't auto-generate if:
+  // - Manager is still loading (hasn't finished initializing state)
+  // - Planner/programmer are loading or have sessions
+  // - No messages yet (manager hasn't processed first message)
+  !managerIsLoading &&
+  hasManagerMessages &&
   !(
     plannerIsLoading ||
     programmerIsLoading ||
@@ -815,12 +825,16 @@ export function ThreadView({
   const allowAutoFeatureGraphGeneration = useMemo(
     () =>
       shouldAutoGenerateFeatureGraph({
+        managerIsLoading: stream.isLoading,
         plannerIsLoading: plannerStream.isLoading,
         programmerIsLoading: programmerStream.isLoading,
         hasPlannerSession,
         hasProgrammerSession,
+        hasManagerMessages: stream.messages.length > 0,
       }),
     [
+      stream.isLoading,
+      stream.messages.length,
       hasPlannerSession,
       hasProgrammerSession,
       plannerStream.isLoading,
@@ -837,6 +851,28 @@ export function ThreadView({
     displayThread.id,
     generateFeatureGraph,
     pendingFeatureGraphPrompt,
+  ]);
+
+  // Auto-generate feature graph when conditions are met:
+  // - Manager has finished loading and initialized state
+  // - There's a pending prompt to use
+  // - No planner/programmer sessions active
+  useEffect(() => {
+    if (
+      allowAutoFeatureGraphGeneration &&
+      pendingFeatureGraphPrompt &&
+      displayThread.id &&
+      !isGeneratingGraph
+    ) {
+      void generateFeatureGraph(displayThread.id, pendingFeatureGraphPrompt);
+      setPendingFeatureGraphPrompt(null);
+    }
+  }, [
+    allowAutoFeatureGraphGeneration,
+    pendingFeatureGraphPrompt,
+    displayThread.id,
+    isGeneratingGraph,
+    generateFeatureGraph,
   ]);
 
   const handleSendMessage = () => {
@@ -878,12 +914,9 @@ export function ThreadView({
           }),
         },
       );
+      // Don't auto-generate immediately - let the useEffect handle it
+      // after manager finishes loading and has initialized state
       setPendingFeatureGraphPrompt(trimmed);
-
-      if (displayThread.id && allowAutoFeatureGraphGeneration) {
-        void generateFeatureGraph(displayThread.id, trimmed);
-        setPendingFeatureGraphPrompt(null);
-      }
       setChatInput("");
     }
   };
