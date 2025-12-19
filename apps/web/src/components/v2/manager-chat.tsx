@@ -239,6 +239,29 @@ export function ManagerChat({
                     </div>
                   );
                 })}
+                {/* Show AI's clarifying question from interrupt */}
+                {hasInterrupt && interruptValue?.description && (
+                  <div className="group bg-muted flex items-start gap-3 rounded-lg p-3">
+                    <div className="mt-0.5 flex-shrink-0">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-950/50">
+                        <Bot className="size-4.5 text-blue-700 dark:text-blue-300" />
+                      </div>
+                    </div>
+                    <div className="relative min-w-0 flex-1 space-y-1 overflow-x-hidden">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground text-xs font-medium">
+                          Open SWE
+                        </span>
+                        <div className="opacity-0 transition-opacity group-hover:opacity-100">
+                          <MessageCopyButton content={interruptValue.description} />
+                        </div>
+                      </div>
+                      <BasicMarkdownText className="text-foreground overflow-x-hidden text-sm">
+                        {interruptValue.description}
+                      </BasicMarkdownText>
+                    </div>
+                  </div>
+                )}
                 {/* Show interrupt indicator when waiting for user response */}
                 {hasInterrupt && (
                   <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/50">
@@ -251,7 +274,7 @@ export function ManagerChat({
                           Waiting for your response
                         </p>
                         <p className="text-xs text-blue-600 dark:text-blue-400">
-                          Please answer the question above to continue. Type your response in the input below.
+                          Type your response in the input below to continue.
                         </p>
                       </div>
                     </div>
