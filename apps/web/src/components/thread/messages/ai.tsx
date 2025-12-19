@@ -217,9 +217,14 @@ function getToolCallsFromMessage(m: Message): ToolCall[] {
 export function mapToolMessageToActionStepProps(
   message: ToolMessage,
   threadMessages: Message[],
+  /**
+   * Optional: the original tool call if already available.
+   * This avoids redundant lookups when the caller already has the tool call.
+   */
+  originalToolCall?: ToolCall,
 ): ActionItemProps {
-  // Use helper that checks both tool_calls property and streamed content
-  const toolCall: ToolCall | undefined = threadMessages
+  // Use the provided tool call or look it up from messages
+  const toolCall: ToolCall | undefined = originalToolCall ?? threadMessages
     .flatMap(getToolCallsFromMessage)
     .find((tc) => tc.id === message.tool_call_id);
 
@@ -678,9 +683,11 @@ export function AssistantMessage({
 
       if (correspondingToolResult) {
         // If we have a tool result, map it to action props
+        // Pass the original toolCall to avoid redundant lookup
         return mapToolMessageToActionStepProps(
           correspondingToolResult,
           threadMessages,
+          toolCall,
         );
       } else if (isGrepTool) {
         const args = toolCall.args as GrepToolArgs;

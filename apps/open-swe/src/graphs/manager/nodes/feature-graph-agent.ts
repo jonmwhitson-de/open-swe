@@ -572,16 +572,17 @@ export async function featureGraphAgent(
     }
   }
 
-  const combinedContent = [
-    getMessageContentString(aiMessage.content),
-    ...userFacingSummaries,
-  ]
+  // Only create a response message with the user-facing summaries
+  // The original aiMessage content is already included in aiMessage
+  const summaryContent = userFacingSummaries
     .map((entry) => entry?.trim())
     .filter((entry): entry is string => Boolean(entry))
     .join("\n\n");
 
-  const responseMessage = combinedContent
-    ? new AIMessage({ content: combinedContent })
+  // Only add a response message if there are summaries that aren't already in the AI message
+  const aiMessageContent = getMessageContentString(aiMessage.content);
+  const responseMessage = summaryContent && summaryContent !== aiMessageContent
+    ? new AIMessage({ content: summaryContent })
     : undefined;
 
   const updates: ManagerGraphUpdate = {
