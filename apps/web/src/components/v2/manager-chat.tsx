@@ -6,7 +6,7 @@ import { useState } from "react";
 import { StickToBottom } from "use-stick-to-bottom";
 import { TooltipIconButton } from "../ui/tooltip-icon-button";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bot, Copy, CopyCheck, ArrowUp, User, AlertCircle } from "lucide-react";
+import { Bot, Copy, CopyCheck, ArrowUp, User, AlertCircle, MessageCircleQuestion } from "lucide-react";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
 import { isAIMessageSDK } from "@/lib/langchain-messages";
@@ -17,7 +17,6 @@ import { Loader2 } from "lucide-react";
 import { parsePartialJson } from "@langchain/core/output_parsers";
 import { RestartRun } from "./restart-run";
 import { useUser } from "@/hooks/useUser";
-import { Interrupt } from "../thread/messages/interrupt";
 import { ManagerGraphState } from "@openswe/shared/open-swe/manager/types";
 
 function MessageCopyButton({ content }: { content: string }) {
@@ -240,16 +239,22 @@ export function ManagerChat({
                     </div>
                   );
                 })}
-                {/* Show interrupt UI if there's an interrupt from design agent */}
-                {hasInterrupt && stream && (
+                {/* Show interrupt indicator when waiting for user response */}
+                {hasInterrupt && (
                   <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/50">
-                    <Interrupt
-                      interruptValue={interruptValue}
-                      isLastMessage={true}
-                      forceRenderInterrupt={true}
-                      thread={stream as ReturnType<typeof useStream<Record<string, unknown>>>}
-                      threadId={managerThreadId}
-                    />
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/50">
+                        <MessageCircleQuestion className="size-4 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                          Waiting for your response
+                        </p>
+                        <p className="text-xs text-blue-600 dark:text-blue-400">
+                          Please answer the question above to continue. Type your response in the input below.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
                 {errorState ? (
