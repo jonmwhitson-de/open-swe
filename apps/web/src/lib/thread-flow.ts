@@ -40,7 +40,10 @@ const resolveFeatureGraphStatus = (
 ): ThreadFlowStage["status"] => {
   if (status === "error") return "error";
   if (status === "running") return "running";
-  if (thread.values?.featureGraph) return "completed";
+  // Check activeFeatureIds instead of featureGraph in state
+  // since featureGraph is now loaded from file to avoid state serialization issues
+  const activeFeatureIds = thread.values?.activeFeatureIds;
+  if (Array.isArray(activeFeatureIds) && activeFeatureIds.length > 0) return "completed";
   return "pending";
 };
 
@@ -51,7 +54,10 @@ const resolvePlannerStatus = (
   if (status === "error") return "error";
   if (arePlanTasksCompleted(thread.values)) return "completed";
   if (thread.values?.plannerSession) return status === "running" ? "running" : "ready";
-  if (thread.values?.featureGraph) return "pending";
+  // Check activeFeatureIds instead of featureGraph in state
+  // since featureGraph is now loaded from file to avoid state serialization issues
+  const activeFeatureIds = thread.values?.activeFeatureIds;
+  if (Array.isArray(activeFeatureIds) && activeFeatureIds.length > 0) return "pending";
   return "blocked";
 };
 
