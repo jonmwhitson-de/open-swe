@@ -27,7 +27,6 @@ import {
   listFeaturesFromGraph,
   loadFeatureGraph,
 } from "@openswe/shared/feature-graph";
-import type { FeatureNode } from "@openswe/shared/feature-graph/types";
 import { createLogger, LogLevel } from "../../../utils/logger.js";
 import { FEATURE_GRAPH_RELATIVE_PATH } from "../utils/feature-graph-path.js";
 
