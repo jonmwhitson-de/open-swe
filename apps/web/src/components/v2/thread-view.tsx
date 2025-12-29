@@ -864,7 +864,7 @@ export function ThreadView({
   );
 
   const handleGenerateFeatureGraph = useCallback(() => {
-    if (!displayThread.id || !pendingFeatureGraphPrompt) return;
+    if (!displayThread.id || !pendingFeatureGraphPrompt || !hasWorkspacePath) return;
 
     void generateFeatureGraph(displayThread.id, pendingFeatureGraphPrompt);
     setPendingFeatureGraphPrompt(null);
@@ -872,6 +872,7 @@ export function ThreadView({
     displayThread.id,
     generateFeatureGraph,
     pendingFeatureGraphPrompt,
+    hasWorkspacePath,
   ]);
 
   // Clear the "awaiting run start" flag when loading actually begins.
@@ -1001,7 +1002,8 @@ export function ThreadView({
   const shouldShowGenerateFeatureGraphButton =
     !allowAutoFeatureGraphGeneration &&
     Boolean(displayThread.id) &&
-    Boolean(pendingFeatureGraphPrompt);
+    Boolean(pendingFeatureGraphPrompt) &&
+    hasWorkspacePath; // Only show when workspace path is available
 
   const featurePlannerThreadId = selectedFeatureRunState?.threadId ?? undefined;
   const featurePlannerRunId = selectedFeatureRunState?.runId ?? undefined;
