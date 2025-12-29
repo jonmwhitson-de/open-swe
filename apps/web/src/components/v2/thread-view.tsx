@@ -931,6 +931,10 @@ export function ThreadView({
 
   // Lock in feature - tells the system the user has provided enough detail
   const handleLockInFeature = () => {
+    // Clear any pending feature graph prompt to prevent auto-generation
+    // from triggering during the lock-in transition (which could cause 409 errors)
+    setPendingFeatureGraphPrompt(null);
+
     const lockInMessage = new HumanMessage({
       id: uuidv4(),
       content: "[LOCK_IN_FEATURE] I have provided enough detail. Please proceed with the feature as described without asking more clarifying questions.",
