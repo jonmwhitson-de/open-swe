@@ -225,10 +225,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // Only update activeFeatureIds in state - don't store featureGraph in state
+    // to avoid state growing too large. The graph is persisted to file by the
+    // backend generation service and loaded from file when needed.
     await client.threads.updateState<ManagerGraphState>(threadId, {
       values: {
-        ...managerState.values,
-        featureGraph: graph,
         activeFeatureIds,
       },
       asNode: "feature-graph-orchestrator",
