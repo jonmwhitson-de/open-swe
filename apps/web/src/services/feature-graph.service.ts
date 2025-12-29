@@ -16,6 +16,9 @@ export interface FeatureDevelopmentResponse {
 /**
  * Fetch feature graph data for a thread by calling the backend load endpoint.
  * This avoids reading the graph from thread state, preventing serialization issues.
+ *
+ * Returns a result with null graph for expected "not ready" states (404, 409).
+ * Only throws for unexpected errors.
  */
 export async function fetchFeatureGraph(
   threadId: string,
@@ -35,6 +38,19 @@ export async function fetchFeatureGraph(
   });
 
   if (!response.ok) {
+    // Handle expected "not ready" states gracefully - return empty result
+    // 404: Graph not generated yet
+    // 409: Thread is busy (run in progress)
+    if (response.status === 404 || response.status === 409) {
+      return {
+        graph: null,
+        activeFeatureIds: [],
+        proposals: [],
+        activeProposalId: null,
+      };
+    }
+
+    // For other errors, throw
     const payload = await response.json().catch(() => null);
     const message =
       (payload && typeof payload.error === "string" ? payload.error : null) ??
