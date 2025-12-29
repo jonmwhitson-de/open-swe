@@ -138,33 +138,49 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           : undefined,
     });
 
-    const managerState = await client.threads
-      .getState<ManagerGraphState>(threadId)
-      .catch((error) => {
-        const status = (error as { status?: number })?.status ?? 500;
+    // Retry getState with exponential backoff if thread is busy
+    const maxRetries = 3;
+    let lastError: unknown = null;
+    let managerState = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        managerState = await client.threads.getState<ManagerGraphState>(threadId);
+        break; // Success, exit retry loop
+      } catch (error) {
+        lastError = error;
+        const status = (error as { status?: number })?.status;
+
+        // Only retry on 409 (thread busy) errors
+        if (status === 409 && attempt < maxRetries - 1) {
+          const delay = Math.pow(2, attempt) * 500; // 500ms, 1000ms, 2000ms
+          logger.warn(`Thread busy, retrying getState in ${delay}ms`, {
+            threadId,
+            attempt: attempt + 1,
+            maxRetries,
+          });
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+
+        // Non-retryable error or final attempt
         logger.error("Failed to load manager state for feature graph", {
           threadId,
           status,
           error,
         });
-
-        const message =
-          status === 404
-            ? "Manager state not found for thread"
-            : "Failed to load manager state";
-
-        return NextResponse.json({ error: message }, { status });
-      });
-
-    if (managerState instanceof NextResponse) {
-      return managerState;
+        break;
+      }
     }
 
     if (!managerState?.values) {
-      return NextResponse.json(
-        { error: "Manager state not found for thread" },
-        { status: 404 },
-      );
+      const status = (lastError as { status?: number })?.status ?? 404;
+      const message = status === 409
+        ? "Thread is busy, please try again later"
+        : status === 404
+          ? "Manager state not found for thread"
+          : "Failed to load manager state";
+      return NextResponse.json({ error: message }, { status });
     }
 
     const workspaceAbsPath =

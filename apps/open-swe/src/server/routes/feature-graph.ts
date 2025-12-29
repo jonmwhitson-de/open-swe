@@ -401,19 +401,48 @@ export function registerFeatureGraphRoute(app: Hono) {
           : undefined,
     });
 
-    const managerThreadState = await client.threads
-      .getState<ManagerGraphState>(threadId)
-      .catch((error) => {
+    // Retry getState with exponential backoff if thread is busy
+    const maxRetries = 3;
+    let lastError: unknown = null;
+    let managerThreadState = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        managerThreadState = await client.threads.getState<ManagerGraphState>(threadId);
+        break; // Success, exit retry loop
+      } catch (error) {
+        lastError = error;
+        const status = (error as { status?: number })?.status;
+
+        // Only retry on 409 (thread busy) errors
+        if (status === 409 && attempt < maxRetries - 1) {
+          const delay = Math.pow(2, attempt) * 500; // 500ms, 1000ms, 2000ms
+          logger.warn(`Thread busy, retrying getState in ${delay}ms`, {
+            threadId,
+            attempt: attempt + 1,
+            maxRetries,
+          });
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+
+        // Non-retryable error or final attempt
         logger.error("Failed to load manager state for feature graph load", {
           error: error instanceof Error ? error.message : String(error),
+          status,
         });
-        return null;
-      });
+        break;
+      }
+    }
 
     if (!managerThreadState?.values) {
+      const status = (lastError as { status?: number })?.status ?? 404;
+      const message = status === 409
+        ? "Thread is busy, please try again later"
+        : "Manager state not found for thread";
       return ctx.json(
-        { error: "Manager state not found for thread" },
-        404 as ContentfulStatusCode,
+        { error: message },
+        status as ContentfulStatusCode,
       );
     }
 
