@@ -28,7 +28,6 @@ import {
   loadFeatureGraph,
 } from "@openswe/shared/feature-graph";
 import type { FeatureNode } from "@openswe/shared/feature-graph/types";
-import type { FeatureGraphJson } from "@openswe/shared";
 import { createLogger, LogLevel } from "../../../utils/logger.js";
 import { FEATURE_GRAPH_RELATIVE_PATH } from "../utils/feature-graph-path.js";
 
@@ -171,48 +170,6 @@ const normalizeFeatureIds = (
   }
 
   return normalized.length > 0 ? normalized : undefined;
-};
-
-const deserializeFeatureGraph = (
-  graph: FeatureGraph | FeatureGraphJson | undefined,
-): FeatureGraph | undefined => {
-  if (!graph) return undefined;
-
-  if (graph instanceof FeatureGraph) return graph;
-
-  const nodes = new Map<string, FeatureNode>();
-
-  for (const entry of graph.nodes) {
-    if (Array.isArray(entry) && entry.length >= 2) {
-      const [id, node] = entry;
-      if (typeof id === "string" && node && typeof node === "object") {
-        nodes.set(id, node as FeatureNode);
-      }
-      continue;
-    }
-
-    if (entry && typeof entry === "object" && "id" in entry) {
-      const node = entry as FeatureNode;
-      if (typeof node.id === "string") {
-        nodes.set(node.id, node);
-      }
-    }
-  }
-
-  if (!nodes.size) return undefined;
-
-  const version = typeof graph.version === "number" ? graph.version : 1;
-
-  try {
-    return new FeatureGraph({
-      version,
-      nodes,
-      edges: Array.isArray(graph.edges) ? graph.edges : [],
-      artifacts: graph.artifacts,
-    });
-  } catch {
-    return undefined;
-  }
 };
 
 const mergeActiveFeatureIds = (
