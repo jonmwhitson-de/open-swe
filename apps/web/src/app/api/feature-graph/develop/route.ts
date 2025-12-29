@@ -277,13 +277,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       ...runIdentifiers,
     } satisfies Record<string, unknown>;
 
+    // Don't include featureGraph in state - it's persisted to file and loaded when needed.
+    // This prevents state from growing too large.
     const updatedManagerState: ManagerGraphUpdate = {
       plannerSession: {
         threadId: plannerThreadId,
         runId: run.run_id,
       },
       activeFeatureIds: [featureId],
-      featureGraph: reconciledGraph,
     };
 
     // Update manager thread state
