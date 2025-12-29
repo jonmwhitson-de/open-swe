@@ -228,8 +228,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Only update activeFeatureIds in state - don't store featureGraph in state
     // to avoid state growing too large. The graph is persisted to file by the
     // backend generation service and loaded from file when needed.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { featureGraph: _excludedGraph, ...restManagerState } = managerState.values;
     await client.threads.updateState<ManagerGraphState>(threadId, {
       values: {
+        ...restManagerState,
         activeFeatureIds,
       },
       asNode: "feature-graph-orchestrator",
