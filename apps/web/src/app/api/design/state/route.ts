@@ -47,16 +47,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const state = threadState.values;
 
-    // Serialize feature graph for JSON response
-    const featureGraphJson = state.featureGraph
-      ? (state.featureGraph as any).toJSON?.() ?? state.featureGraph
-      : null;
-
+    // Feature graph is now loaded from file instead of state to avoid
+    // state serialization issues. Clients should use /api/feature-graph/state
+    // to get the feature graph separately if needed.
     return NextResponse.json({
       thread_id: threadId,
       manager_thread_id: state.managerThreadId ?? null,
       workspace_path: state.workspacePath ?? null,
-      feature_graph: featureGraphJson,
+      feature_graph: null, // Loaded from file via /api/feature-graph/state
       ready_feature_ids: state.readyFeatureIds ?? [],
       pending_proposals: state.pendingProposals ?? [],
       clarifying_questions: state.clarifyingQuestions ?? [],

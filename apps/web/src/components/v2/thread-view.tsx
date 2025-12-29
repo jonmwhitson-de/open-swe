@@ -72,6 +72,7 @@ export const shouldAutoGenerateFeatureGraph = ({
   hasProgrammerSession,
   hasManagerMessages,
   hasInterrupt,
+  hasWorkspacePath,
 }: {
   managerIsLoading: boolean;
   plannerIsLoading: boolean;
@@ -80,15 +81,18 @@ export const shouldAutoGenerateFeatureGraph = ({
   hasProgrammerSession: boolean;
   hasManagerMessages: boolean;
   hasInterrupt?: boolean;
+  hasWorkspacePath?: boolean;
 }) =>
   // Don't auto-generate if:
   // - Manager is still loading (hasn't finished initializing state)
   // - Planner/programmer are loading or have sessions
   // - No messages yet (manager hasn't processed first message)
   // - Manager has an active interrupt (waiting for user response)
+  // - Workspace path not set yet (state not fully initialized)
   !managerIsLoading &&
   hasManagerMessages &&
   !hasInterrupt &&
+  hasWorkspacePath &&
   !(
     plannerIsLoading ||
     programmerIsLoading ||
@@ -831,6 +835,10 @@ export function ThreadView({
 
   const hasInterrupt = Boolean(stream.interrupt);
 
+  const hasWorkspacePath = Boolean(
+    stream.values?.workspacePath || stream.values?.workspaceAbsPath,
+  );
+
   const allowAutoFeatureGraphGeneration = useMemo(
     () =>
       shouldAutoGenerateFeatureGraph({
@@ -841,6 +849,7 @@ export function ThreadView({
         hasProgrammerSession,
         hasManagerMessages: stream.messages.length > 0,
         hasInterrupt,
+        hasWorkspacePath,
       }),
     [
       stream.isLoading,
@@ -850,11 +859,12 @@ export function ThreadView({
       plannerStream.isLoading,
       programmerStream.isLoading,
       hasInterrupt,
+      hasWorkspacePath,
     ],
   );
 
   const handleGenerateFeatureGraph = useCallback(() => {
-    if (!displayThread.id || !pendingFeatureGraphPrompt) return;
+    if (!displayThread.id || !pendingFeatureGraphPrompt || !hasWorkspacePath) return;
 
     void generateFeatureGraph(displayThread.id, pendingFeatureGraphPrompt);
     setPendingFeatureGraphPrompt(null);
@@ -862,6 +872,7 @@ export function ThreadView({
     displayThread.id,
     generateFeatureGraph,
     pendingFeatureGraphPrompt,
+    hasWorkspacePath,
   ]);
 
   // Clear the "awaiting run start" flag when loading actually begins.
@@ -991,7 +1002,8 @@ export function ThreadView({
   const shouldShowGenerateFeatureGraphButton =
     !allowAutoFeatureGraphGeneration &&
     Boolean(displayThread.id) &&
-    Boolean(pendingFeatureGraphPrompt);
+    Boolean(pendingFeatureGraphPrompt) &&
+    hasWorkspacePath; // Only show when workspace path is available
 
   const featurePlannerThreadId = selectedFeatureRunState?.threadId ?? undefined;
   const featurePlannerRunId = selectedFeatureRunState?.runId ?? undefined;

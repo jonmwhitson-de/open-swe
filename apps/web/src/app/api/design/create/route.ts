@@ -8,7 +8,6 @@ import {
 } from "@openswe/shared/constants";
 import type { ManagerGraphState } from "@openswe/shared/open-swe/manager/types";
 import type { DesignGraphUpdate } from "@openswe/shared/open-swe/design/types";
-import { coerceFeatureGraph } from "@/lib/coerce-feature-graph";
 
 function resolveApiUrl(): string {
   return (
@@ -64,13 +63,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
         if (managerThreadState?.values) {
           const managerState = managerThreadState.values;
-          const featureGraph = coerceFeatureGraph(managerState.featureGraph);
-
+          // Don't pass featureGraph in the input - it's now loaded from file
+          // when needed to avoid state serialization issues
           designInput = {
             targetRepository: managerState.targetRepository,
             workspacePath: managerState.workspacePath,
             managerThreadId,
-            featureGraph: featureGraph ?? undefined,
           };
         }
       } catch (error) {

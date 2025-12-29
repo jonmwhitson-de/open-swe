@@ -21,6 +21,52 @@ import type { GraphConfig } from "@openswe/shared/open-swe/types";
 import { getCustomConfigurableFields } from "@openswe/shared/open-swe/utils/config";
 import { coerceFeatureGraph } from "@/lib/coerce-feature-graph";
 
+/**
+ * Load feature graph from the backend by calling the /feature-graph/load endpoint.
+ * This loads from file instead of state to avoid state serialization issues.
+ */
+async function loadFeatureGraphFromBackend(
+  threadId: string,
+): Promise<{ graph: FeatureGraph | null; error?: string }> {
+  const backendUrl =
+    process.env.LANGGRAPH_API_URL ??
+    process.env.NEXT_PUBLIC_API_URL ??
+    "http://localhost:2024";
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (process.env.OPEN_SWE_LOCAL_MODE === "true") {
+    headers[LOCAL_MODE_HEADER] = "true";
+  }
+
+  try {
+    const response = await fetch(`${backendUrl}/feature-graph/load`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ thread_id: threadId }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      const message =
+        (payload && typeof payload.error === "string" ? payload.error : null) ??
+        `Failed to load feature graph (status ${response.status})`;
+      return { graph: null, error: message };
+    }
+
+    const payload = await response.json();
+    const graph = coerceFeatureGraph(payload.featureGraph);
+    return { graph };
+  } catch (error) {
+    return {
+      graph: null,
+      error: error instanceof Error ? error.message : "Failed to load feature graph",
+    };
+  }
+}
+
 function resolveApiUrl(): string {
   return (
     process.env.LANGGRAPH_API_URL ??
@@ -165,10 +211,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const managerState = managerThreadState.values;
-    const featureGraph = coerceFeatureGraph(managerState.featureGraph);
+
+    // Load feature graph from backend (file-based) instead of state
+    // to avoid state serialization issues
+    const { graph: featureGraph, error: graphError } = await loadFeatureGraphFromBackend(threadId);
     if (!featureGraph) {
       return NextResponse.json(
-        { error: "Feature graph not available for thread. Generate a feature graph first." },
+        { error: graphError ?? "Feature graph not available for thread. Generate a feature graph first." },
         { status: 404 },
       );
     }
