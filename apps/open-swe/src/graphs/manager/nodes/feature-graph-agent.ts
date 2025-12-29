@@ -266,7 +266,9 @@ export async function featureGraphAgent(
   }
 
   const proposalState = ensureProposalState(state.featureProposals);
-  const featureGraph = deserializeFeatureGraph(state.featureGraph);
+  // Load feature graph from file instead of state to avoid storing it in state.
+  // This prevents state from growing too large and causing serialization errors.
+  const featureGraph = await initializeFeatureGraph(state.workspacePath);
   const systemPrompt = `${FEATURE_AGENT_SYSTEM_PROMPT}\n\n# Current Proposals\n${formatProposals(proposalState)}\n\n# Feature Graph\n${formatFeatureCatalog(featureGraph, state.activeFeatureIds)}`;
 
   const tools = [
@@ -573,10 +575,12 @@ export async function featureGraphAgent(
 
   // Don't add a separate responseMessage - the summaries are already in toolMessages
   // Adding both causes duplicate content in the UI
+  // NOTE: We intentionally do NOT include featureGraph in the state update.
+  // The graph is persisted directly to file and reloaded on each invocation.
+  // This prevents state from growing too large and causing serialization errors.
   const updates: ManagerGraphUpdate = {
     messages: [aiMessage, ...toolMessages],
     featureProposals: updatedProposals,
-    ...(updatedGraph ? { featureGraph: updatedGraph } : {}),
     ...(updatedActiveFeatureIds
       ? { activeFeatureIds: updatedActiveFeatureIds }
       : {}),

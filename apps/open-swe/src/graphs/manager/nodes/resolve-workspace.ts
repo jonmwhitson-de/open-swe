@@ -95,13 +95,15 @@ export async function resolveWorkspace(
       updates.workspacePath = workspacePath;
     }
 
-    if (!state.featureGraph && workspacePath) {
+    // Ensure the feature graph file exists in the workspace.
+    // We no longer store the graph in state to avoid state growing too large.
+    // Each node loads the graph from file when needed.
+    if (workspacePath) {
       const graphPath = resolvePathInsideWorkspace(
         workspacePath,
         FEATURE_GRAPH_RELATIVE_PATH,
       );
       let graphSourcePath = graphPath;
-      let graphData: FeatureGraphData | undefined;
       let activeFeatureIds: string[] | undefined;
 
       const shouldGenerate =
@@ -114,7 +116,6 @@ export async function resolveWorkspace(
             graphPath,
             config: _config,
           });
-          graphData = generated.graphData;
           activeFeatureIds = generated.activeFeatureIds;
           logger.info("Generated feature graph for workspace", { graphPath });
         } catch (generationError) {
@@ -155,15 +156,16 @@ export async function resolveWorkspace(
         }
       }
 
-      logger.info("Loading feature graph", { graphPath: graphSourcePath });
-      const data = graphData ?? (await loadFeatureGraph(graphSourcePath));
-      updates.featureGraph = new FeatureGraph(data);
+      // Load to verify and get active feature IDs, but don't store in state
+      logger.info("Verifying feature graph", { graphPath: graphSourcePath });
+      const data = await loadFeatureGraph(graphSourcePath);
+      const featureGraph = new FeatureGraph(data);
       updates.activeFeatureIds = mergeActiveFeatureIds(
         activeFeatureIds,
         state.activeFeatureIds,
-        updates.featureGraph,
+        featureGraph,
       );
-      logger.info("Loaded feature graph", {
+      logger.info("Verified feature graph", {
         graphPath: graphSourcePath,
         nodeKeys: Array.from(data.nodes.keys()).length,
         edgeCount: data.edges.length,
