@@ -71,6 +71,7 @@ export const shouldAutoGenerateFeatureGraph = ({
   hasPlannerSession,
   hasProgrammerSession,
   hasManagerMessages,
+  hasInterrupt,
 }: {
   managerIsLoading: boolean;
   plannerIsLoading: boolean;
@@ -78,13 +79,16 @@ export const shouldAutoGenerateFeatureGraph = ({
   hasPlannerSession: boolean;
   hasProgrammerSession: boolean;
   hasManagerMessages: boolean;
+  hasInterrupt?: boolean;
 }) =>
   // Don't auto-generate if:
   // - Manager is still loading (hasn't finished initializing state)
   // - Planner/programmer are loading or have sessions
   // - No messages yet (manager hasn't processed first message)
+  // - Manager has an active interrupt (waiting for user response)
   !managerIsLoading &&
   hasManagerMessages &&
+  !hasInterrupt &&
   !(
     plannerIsLoading ||
     programmerIsLoading ||
@@ -822,6 +826,8 @@ export function ThreadView({
     programmerSession?.runId && programmerSession?.threadId,
   );
 
+  const hasInterrupt = Boolean(stream.interrupt);
+
   const allowAutoFeatureGraphGeneration = useMemo(
     () =>
       shouldAutoGenerateFeatureGraph({
@@ -831,6 +837,7 @@ export function ThreadView({
         hasPlannerSession,
         hasProgrammerSession,
         hasManagerMessages: stream.messages.length > 0,
+        hasInterrupt,
       }),
     [
       stream.isLoading,
@@ -839,6 +846,7 @@ export function ThreadView({
       hasProgrammerSession,
       plannerStream.isLoading,
       programmerStream.isLoading,
+      hasInterrupt,
     ],
   );
 
