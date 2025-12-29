@@ -6,41 +6,53 @@ import { createClient } from "@/providers/client";
 import {
   FeatureGraphFetchResult,
   mapFeatureGraphPayload,
-  mapFeatureProposalState,
-  normalizeFeatureIds,
 } from "@/lib/feature-graph-payload";
-import { coerceFeatureGraph } from "@/lib/coerce-feature-graph";
 
 export interface FeatureDevelopmentResponse {
   plannerThreadId: string;
   runId: string;
 }
 
+/**
+ * Fetch feature graph data for a thread by calling the backend load endpoint.
+ * This avoids reading the graph from thread state, preventing serialization issues.
+ */
 export async function fetchFeatureGraph(
   threadId: string,
-  client?: Client<ManagerGraphState>,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _client?: Client<ManagerGraphState>,
 ): Promise<FeatureGraphFetchResult> {
   if (!threadId) {
     throw new Error("Thread id is required to fetch feature graph data");
   }
 
-  const resolvedClient = client ?? createClient(getApiUrl());
+  // Call the state API which now proxies to the backend /feature-graph/load endpoint
+  const response = await fetch(`/api/feature-graph/state?thread_id=${encodeURIComponent(threadId)}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
 
-  const thread = await resolvedClient.threads.get<ManagerGraphState>(threadId);
-  const graph = coerceFeatureGraph(thread?.values?.featureGraph);
-  const activeFeatureIds = normalizeFeatureIds(
-    thread?.values?.activeFeatureIds,
-  );
-  const { proposals, activeProposalId } = mapFeatureProposalState(
-    thread?.values?.featureProposals,
-  );
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    const message =
+      (payload && typeof payload.error === "string" ? payload.error : null) ??
+      "Failed to load feature graph";
+    throw new Error(message);
+  }
 
-  return {
-    graph,
-    activeFeatureIds,
-    proposals,
-    activeProposalId,
-  };
+  const payload = await response.json();
+
+  // Map the response to our expected format
+  const result = mapFeatureGraphPayload({
+    featureGraph: payload.feature_graph,
+    activeFeatureIds: payload.active_feature_ids,
+    featureProposals: payload.feature_proposals?.proposals,
+    activeProposalId: payload.feature_proposals?.activeProposalId,
+  });
+
+  return result;
 }
 
 export async function requestFeatureGraphGeneration(
