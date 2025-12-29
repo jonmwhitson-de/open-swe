@@ -11,7 +11,6 @@ import {
   listFeaturesFromGraph,
   loadFeatureGraph,
 } from "@openswe/shared/feature-graph";
-import type { FeatureGraphData } from "@openswe/shared/feature-graph/loader";
 import {
   resolveWorkspacePath,
   resolvePathInsideWorkspace,
