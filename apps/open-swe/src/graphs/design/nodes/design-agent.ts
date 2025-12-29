@@ -221,10 +221,10 @@ export async function designAgent(
     throw new Error("No human message found in design conversation.");
   }
 
-  let featureGraph = state.featureGraph;
-  if (!featureGraph && state.workspacePath) {
-    featureGraph = await initializeFeatureGraph(state.workspacePath);
-  }
+  // Always load feature graph from file to avoid storing it in state.
+  // This prevents state from growing too large and causing serialization errors.
+  // The graph is persisted to file after each change, so this is always up-to-date.
+  let featureGraph = await initializeFeatureGraph(state.workspacePath);
 
   const systemPrompt = `${DESIGN_AGENT_SYSTEM_PROMPT}
 
@@ -805,9 +805,11 @@ ${state.designSession?.conversationSummary ? `Summary: ${state.designSession.con
 
   // Don't add a separate responseMessage - the summaries are already in toolMessages
   // Adding both causes duplicate content in the UI
+  // NOTE: We intentionally do NOT include featureGraph in the state update.
+  // The graph is persisted directly to file and reloaded on each invocation.
+  // This prevents state from growing too large and causing serialization errors.
   const updates: DesignGraphUpdate = {
     messages: [aiMessage, ...toolMessages],
-    featureGraph: updatedGraph,
     pendingProposals: updatedProposals,
     clarifyingQuestions: updatedQuestions,
     readyFeatureIds: updatedReadyFeatureIds,

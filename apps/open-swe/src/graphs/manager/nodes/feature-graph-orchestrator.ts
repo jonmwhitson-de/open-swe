@@ -1,3 +1,4 @@
+import path from "node:path";
 import { Command, END } from "@langchain/langgraph";
 import { Client } from "@langchain/langgraph-sdk";
 import {
@@ -8,7 +9,7 @@ import {
   ToolMessage,
   isHumanMessage,
 } from "@langchain/core/messages";
-import { FeatureGraph } from "@openswe/shared/feature-graph";
+import { FeatureGraph, loadFeatureGraph } from "@openswe/shared/feature-graph";
 import {
   FeatureEdge,
   FeatureNode,
@@ -25,6 +26,7 @@ import {
   featureGraphToFile,
   persistFeatureGraph,
 } from "../utils/feature-graph-mutations.js";
+import { FEATURE_GRAPH_RELATIVE_PATH } from "../utils/feature-graph-path.js";
 import { createLogger, LogLevel } from "../../../utils/logger.js";
 
 const FEATURE_PLANNER_AGENT_ID = "openswe-feature-planner";
@@ -207,6 +209,29 @@ const buildPlannerClient = (): Client =>
         : undefined,
   });
 
+/**
+ * Load feature graph from file instead of state to avoid storing it in state.
+ * This prevents state from growing too large and causing serialization errors.
+ */
+const loadFeatureGraphFromFile = async (
+  workspacePath: string | undefined,
+): Promise<FeatureGraph | undefined> => {
+  if (!workspacePath) return undefined;
+
+  const graphPath = path.join(workspacePath, FEATURE_GRAPH_RELATIVE_PATH);
+  try {
+    const data = await loadFeatureGraph(graphPath);
+    logger.info("Loaded feature graph from file", { graphPath });
+    return new FeatureGraph(data);
+  } catch (error) {
+    logger.warn("Failed to load feature graph from file", {
+      graphPath,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
+};
+
 export type FeaturePlannerValues = {
   messages?: unknown;
   featureGraph?: unknown;
@@ -214,21 +239,22 @@ export type FeaturePlannerValues = {
   response?: unknown;
 };
 
-  const buildPlannerInput = (
-    state: ManagerGraphState,
-    userMessage: HumanMessage,
-  ) => {
+const buildPlannerInput = (
+  state: ManagerGraphState,
+  userMessage: HumanMessage,
+  featureGraph: FeatureGraph,
+) => {
   const plannerSystemMessage = new SystemMessage({
     content: FEATURE_PLANNER_SYSTEM_PROMPT,
   });
 
-    return {
-      input: {
-        messages: [plannerSystemMessage, ...state.messages],
-        featureGraph: featureGraphToFile(state.featureGraph!),
-        activeFeatureIds: state.activeFeatureIds,
-        workspacePath: state.workspacePath,
-        userMessage: getMessageContentString(userMessage.content),
+  return {
+    input: {
+      messages: [plannerSystemMessage, ...state.messages],
+      featureGraph: featureGraphToFile(featureGraph),
+      activeFeatureIds: state.activeFeatureIds,
+      workspacePath: state.workspacePath,
+      userMessage: getMessageContentString(userMessage.content),
       toolingContract: {
         requireStableFeatureId: true,
         requireArtifacts: true,
@@ -245,7 +271,17 @@ export async function featureGraphOrchestrator(
   config: GraphConfig,
 ): Promise<Command> {
   const userMessage = state.messages.findLast(isHumanMessage);
-  if (!userMessage || !state.featureGraph) {
+  if (!userMessage) {
+    return new Command({
+      goto: "classify-message",
+    });
+  }
+
+  // Load feature graph from file instead of state to avoid storing it in state.
+  // This prevents state from growing too large and causing serialization errors.
+  const featureGraph = await loadFeatureGraphFromFile(state.workspacePath);
+  if (!featureGraph) {
+    logger.warn("No feature graph available for orchestrator");
     return new Command({
       goto: "classify-message",
     });
@@ -255,7 +291,7 @@ export async function featureGraphOrchestrator(
 
   let plannerValues: FeaturePlannerValues | null = null;
   try {
-    const plannerInput = buildPlannerInput(state, userMessage);
+    const plannerInput = buildPlannerInput(state, userMessage, featureGraph);
 
     const plannerResult = await plannerClient.runs.wait(
       null,
@@ -320,16 +356,16 @@ export async function featureGraphOrchestrator(
   let shouldEnd = Boolean(messages.length);
 
   if (updatedGraph) {
-    const changed = graphChanged(state.featureGraph, updatedGraph);
-    updates.featureGraph = updatedGraph;
+    const changed = graphChanged(featureGraph, updatedGraph);
     shouldEnd = shouldEnd || changed;
 
+    // Persist to file only - don't store in state to avoid state growing too large
     if (changed) {
       await persistFeatureGraph(updatedGraph, state.workspacePath);
       logger.info("Persisted feature planner graph changes");
     }
   } else {
-    updatedGraph = state.featureGraph;
+    updatedGraph = featureGraph;
   }
 
   if (normalizedFeatureIds) {

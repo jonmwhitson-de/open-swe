@@ -1,3 +1,4 @@
+import path from "node:path";
 import { GraphConfig, InteractionPhase } from "@openswe/shared/open-swe/types";
 import {
   ManagerGraphState,
@@ -38,7 +39,8 @@ import { PlannerGraphState } from "@openswe/shared/open-swe/planner/types";
 import { GraphState } from "@openswe/shared/open-swe/types";
 import { Client } from "@langchain/langgraph-sdk";
 import { shouldCreateIssue } from "../../../../utils/should-create-issue.js";
-import { FeatureGraph, listFeaturesFromGraph } from "@openswe/shared/feature-graph";
+import { FeatureGraph, listFeaturesFromGraph, loadFeatureGraph } from "@openswe/shared/feature-graph";
+import { FEATURE_GRAPH_RELATIVE_PATH } from "../../utils/feature-graph-path.js";
 const logger = createLogger(LogLevel.INFO, "ClassifyMessage");
 
 function getPhase(
@@ -74,6 +76,24 @@ function isRealUserMessage(msg: BaseMessage): msg is HumanMessage {
 }
 
 /**
+ * Load feature graph from file instead of state to avoid storing it in state.
+ * This prevents state from growing too large and causing serialization errors.
+ */
+async function loadFeatureGraphFromFile(
+  workspacePath: string | undefined,
+): Promise<FeatureGraph | undefined> {
+  if (!workspacePath) return undefined;
+
+  const graphPath = path.join(workspacePath, FEATURE_GRAPH_RELATIVE_PATH);
+  try {
+    const data = await loadFeatureGraph(graphPath);
+    return new FeatureGraph(data);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Classify the latest human message to determine how to route the request.
  * Requests can be routed to:
  * 1. reply - dont need to plan, just reply. This could be if the user sends a message which is not classified as a request, or if the programmer/planner is already running.
@@ -103,9 +123,13 @@ export async function classifyMessage(
     userMessage.additional_kwargs?.lockInFeature === true ||
     getMessageContentString(userMessage.content).includes("[LOCK_IN_FEATURE]");
 
+  // Load feature graph from file instead of state to avoid storing it in state.
+  // This prevents state from growing too large and causing serialization errors.
+  const featureGraph = await loadFeatureGraphFromFile(state.workspacePath);
+
   if (isLockInFeature && phase === "design") {
     logger.info("User locked in feature - proceeding without further clarification", {
-      hasFeatureGraph: Boolean(state.featureGraph),
+      hasFeatureGraph: Boolean(featureGraph),
     });
 
     // Always route to END when locking in - this lets the run complete cleanly
@@ -157,12 +181,8 @@ export async function classifyMessage(
       .filter(Boolean),
   );
 
-  const featureGraphData =
-    state.featureGraph instanceof FeatureGraph
-      ? state.featureGraph.toJSON()
-      : state.featureGraph && "nodes" in state.featureGraph
-        ? state.featureGraph
-        : undefined;
+  // Use locally loaded feature graph instead of state.featureGraph
+  const featureGraphData = featureGraph?.toJSON();
 
   const activeFeatureNodes = featureGraphData
     ? listFeaturesFromGraph(featureGraphData)
