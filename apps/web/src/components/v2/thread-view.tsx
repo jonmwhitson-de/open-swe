@@ -154,6 +154,9 @@ export function ThreadView({
   const [isCancellingManagerRun, setIsCancellingManagerRun] = useState(false);
   const [pendingFeatureGraphPrompt, setPendingFeatureGraphPrompt] =
     useState<string | null>(null);
+  // Track when we're waiting for a run to start after submitting a message.
+  // This prevents auto-generation from racing with the just-submitted run.
+  const isAwaitingRunStartRef = useRef(false);
 
   const {
     status: realTimeStatus,
@@ -861,16 +864,26 @@ export function ThreadView({
     pendingFeatureGraphPrompt,
   ]);
 
+  // Clear the "awaiting run start" flag when loading actually begins.
+  // This prevents auto-generation from racing with the just-submitted run.
+  useEffect(() => {
+    if (stream.isLoading && isAwaitingRunStartRef.current) {
+      isAwaitingRunStartRef.current = false;
+    }
+  }, [stream.isLoading]);
+
   // Auto-generate feature graph when conditions are met:
   // - Manager has finished loading and initialized state
   // - There's a pending prompt to use
   // - No planner/programmer sessions active
+  // - Not awaiting a run to start (prevents race condition)
   useEffect(() => {
     if (
       allowAutoFeatureGraphGeneration &&
       pendingFeatureGraphPrompt &&
       displayThread.id &&
-      !isGeneratingGraph
+      !isGeneratingGraph &&
+      !isAwaitingRunStartRef.current
     ) {
       void generateFeatureGraph(displayThread.id, pendingFeatureGraphPrompt);
       setPendingFeatureGraphPrompt(null);
@@ -909,6 +922,9 @@ export function ThreadView({
           requestSource,
         },
       });
+      // Mark that we're waiting for the run to start - this blocks auto-generation
+      // until stream.isLoading becomes true, preventing race conditions
+      isAwaitingRunStartRef.current = true;
       stream.submit(
         {
           messages: [newHumanMessage],
