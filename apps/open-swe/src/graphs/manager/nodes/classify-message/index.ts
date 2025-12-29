@@ -108,14 +108,12 @@ export async function classifyMessage(
       hasFeatureGraph: Boolean(state.featureGraph),
     });
 
-    // If we have a feature graph, route to the orchestrator to finalize it
-    // If we don't have one yet, just acknowledge and end - the UI will trigger generation
-    const hasFeatureGraph = Boolean(state.featureGraph);
-
+    // Always route to END when locking in - this lets the run complete cleanly
+    // and allows the UI to handle feature graph generation without conflicts.
+    // Don't route to feature-graph-orchestrator as it can cause "thread busy" errors
+    // when the orchestrator's feature-planner call conflicts with frontend operations.
     const acknowledgmentMessage = new AIMessage({
-      content: hasFeatureGraph
-        ? "Got it! I'll proceed with the feature as described. Let me finalize the feature graph."
-        : "Got it! I've noted your requirements. The feature graph will be generated based on our discussion.",
+      content: "Got it! I've noted your requirements. You can now generate the feature graph based on our discussion.",
       additional_kwargs: {
         phase,
         lockInAcknowledged: true,
@@ -127,7 +125,7 @@ export async function classifyMessage(
         messages: [acknowledgmentMessage],
         userHasApprovedFeature: true,
       },
-      goto: hasFeatureGraph ? "feature-graph-orchestrator" : END,
+      goto: END,
     });
   }
 
