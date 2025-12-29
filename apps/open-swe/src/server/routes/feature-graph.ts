@@ -1,10 +1,12 @@
 import { randomUUID } from "crypto";
+import path from "node:path";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { StreamMode } from "@langchain/langgraph-sdk";
 import {
   clarifyFeatureDescription,
   FeatureGraph,
+  loadFeatureGraph,
 } from "@openswe/shared/feature-graph";
 import type {
   ArtifactCollection,
@@ -35,8 +37,32 @@ import {
   reconcileFeatureGraphDependencies,
 } from "../../graphs/manager/utils/feature-graph-mutations.js";
 import { createLangGraphClient } from "../../utils/langgraph-client.js";
+import { FEATURE_GRAPH_RELATIVE_PATH } from "../../graphs/manager/utils/feature-graph-path.js";
 
 const logger = createLogger(LogLevel.INFO, "FeatureGraphRoute");
+
+/**
+ * Load the feature graph from file for a given workspace path.
+ * Returns null if the graph file doesn't exist or can't be parsed.
+ */
+async function loadFeatureGraphFromFile(
+  workspacePath: string | undefined,
+): Promise<FeatureGraph | null> {
+  if (!workspacePath) return null;
+
+  const graphPath = path.join(workspacePath, FEATURE_GRAPH_RELATIVE_PATH);
+
+  try {
+    const data = await loadFeatureGraph(graphPath);
+    return new FeatureGraph(data);
+  } catch (error) {
+    logger.warn("Failed to load feature graph from file", {
+      graphPath,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
 
 type GenerateRequestBody = {
   workspaceAbsPath?: unknown;
@@ -172,10 +198,12 @@ export function registerFeatureGraphRoute(app: Hono) {
       );
     }
 
-    const featureGraph = coerceFeatureGraph(managerThreadState.values.featureGraph);
+    // Load feature graph from file instead of state to avoid state serialization issues
+    const workspacePath = managerThreadState.values.workspacePath;
+    const featureGraph = await loadFeatureGraphFromFile(workspacePath);
     if (!featureGraph) {
       return ctx.json(
-        { error: "Feature graph not available for thread" },
+        { error: "Feature graph not available for thread. Please generate a feature graph first." },
         404 as ContentfulStatusCode,
       );
     }
@@ -210,19 +238,22 @@ export function registerFeatureGraphRoute(app: Hono) {
     });
 
     if (existingPlannerSession?.threadId && existingPlannerSession?.runId) {
+      // Don't include featureGraph in state to avoid serialization issues - it's loaded from file
       const updatedManagerState: ManagerGraphUpdate = {
         plannerSession: {
           threadId: plannerThreadId,
           runId: existingPlannerSession.runId,
         },
         activeFeatureIds: [featureId],
-        featureGraph: reconciledGraph,
       };
+
+      // Exclude featureGraph from state update to prevent serialization issues
+      const { featureGraph: _excludedGraph, ...existingManagerState } = managerThreadState.values;
 
       await client.threads
         .updateState<ManagerGraphState>(threadId, {
           values: {
-            ...managerThreadState.values,
+            ...existingManagerState,
             ...updatedManagerState,
           },
           asNode: "start-planner",
@@ -302,19 +333,22 @@ export function registerFeatureGraphRoute(app: Hono) {
       thread_id: plannerThreadId,
     };
 
+    // Don't include featureGraph in state to avoid serialization issues - it's loaded from file
     const updatedManagerState: ManagerGraphUpdate = {
       plannerSession: {
         threadId: plannerThreadId,
         runId: run.run_id,
       },
       activeFeatureIds: [featureId],
-      featureGraph: reconciledGraph,
     };
+
+    // Exclude featureGraph from state update to prevent serialization issues
+    const { featureGraph: _excludedGraph, ...restManagerState } = managerThreadState.values;
 
     await client.threads
       .updateState<ManagerGraphState>(threadId, {
         values: {
-          ...managerThreadState.values,
+          ...restManagerState,
           ...updatedManagerState,
         },
         asNode: "start-planner",
@@ -341,6 +375,74 @@ export function registerFeatureGraphRoute(app: Hono) {
     return ctx.json({
       planner_thread_id: plannerThreadId,
       run_id: run.run_id,
+    });
+  });
+
+  /**
+   * Load feature graph from file for a thread.
+   * This endpoint doesn't modify state, avoiding "thread busy" errors.
+   */
+  app.post("/feature-graph/load", async (ctx) => {
+    const body = await ctx.req.json<{ thread_id?: unknown; threadId?: unknown }>().catch((error) => {
+      logger.error("Invalid JSON payload for feature graph load", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    });
+
+    const threadId = resolveThreadId(body as DevelopRequestBody | null);
+
+    if (!threadId) {
+      return ctx.json(
+        { error: "thread_id is required" },
+        400 as ContentfulStatusCode,
+      );
+    }
+
+    const client = createLangGraphClient({
+      defaultHeaders:
+        process.env.OPEN_SWE_LOCAL_MODE === "true"
+          ? { [LOCAL_MODE_HEADER]: "true" }
+          : undefined,
+    });
+
+    const managerThreadState = await client.threads
+      .getState<ManagerGraphState>(threadId)
+      .catch((error) => {
+        logger.error("Failed to load manager state for feature graph load", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      });
+
+    if (!managerThreadState?.values) {
+      return ctx.json(
+        { error: "Manager state not found for thread" },
+        404 as ContentfulStatusCode,
+      );
+    }
+
+    const workspacePath = managerThreadState.values.workspacePath;
+    const featureGraph = await loadFeatureGraphFromFile(workspacePath);
+
+    if (!featureGraph) {
+      return ctx.json(
+        { error: "Feature graph not available for thread. Please generate a feature graph first." },
+        404 as ContentfulStatusCode,
+      );
+    }
+
+    const serialized = featureGraph.toJSON();
+
+    return ctx.json({
+      featureGraph: {
+        version: serialized.version,
+        nodes: serialized.nodes,
+        edges: serialized.edges,
+        artifacts: serialized.artifacts,
+      },
+      activeFeatureIds: managerThreadState.values.activeFeatureIds ?? [],
+      featureProposals: managerThreadState.values.featureProposals ?? null,
     });
   });
 
@@ -404,7 +506,9 @@ export function registerFeatureGraphRoute(app: Hono) {
 
     const managerState = managerThreadState.values;
     const proposalState = ensureProposalState(managerState.featureProposals);
-    const featureGraph = coerceFeatureGraph(managerState.featureGraph);
+
+    // Load feature graph from file instead of state to avoid state serialization issues
+    const featureGraph = await loadFeatureGraphFromFile(managerState.workspacePath);
 
     const resolvedFeatureId = featureId ?? findFeatureIdForProposal(
       proposalState,
@@ -420,7 +524,7 @@ export function registerFeatureGraphRoute(app: Hono) {
 
     if (!featureGraph) {
       return ctx.json(
-        { error: "Feature graph not available for thread" },
+        { error: "Feature graph not available for thread. Please generate a feature graph first." },
         404 as ContentfulStatusCode,
       );
     }
@@ -522,14 +626,17 @@ export function registerFeatureGraphRoute(app: Hono) {
         ? addActiveFeatureId(managerState.activeFeatureIds, resolvedFeatureId)
         : normalizeFeatureIds(managerState.activeFeatureIds);
 
+    // Don't include featureGraph in state to avoid serialization issues - it's persisted to file
     const updatedState: ManagerGraphUpdate = {
-      featureGraph: updatedGraph,
       featureProposals: updatedProposals,
       activeFeatureIds,
     };
 
+    // Exclude featureGraph from state update to prevent serialization issues
+    const { featureGraph: _excludedGraph, ...restManagerState } = managerState;
+
     await client.threads.updateState<ManagerGraphState>(threadId, {
-      values: { ...managerState, ...updatedState },
+      values: { ...restManagerState, ...updatedState },
       asNode: "feature-graph-agent",
     });
 

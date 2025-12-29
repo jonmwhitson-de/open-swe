@@ -230,13 +230,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // backend generation service and loaded from file when needed.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { featureGraph: _excludedGraph, ...restManagerState } = managerState.values;
-    await client.threads.updateState<ManagerGraphState>(threadId, {
-      values: {
-        ...restManagerState,
-        activeFeatureIds,
-      },
-      asNode: "feature-graph-orchestrator",
-    });
+
+    // Try to update state, but don't fail the whole operation if thread is busy.
+    // The graph is already persisted to file, so activeFeatureIds update is nice-to-have.
+    try {
+      await client.threads.updateState<ManagerGraphState>(threadId, {
+        values: {
+          ...restManagerState,
+          activeFeatureIds,
+        },
+        asNode: "feature-graph-orchestrator",
+      });
+    } catch (updateError) {
+      logger.warn("Failed to update thread state after generation (thread may be busy)", {
+        threadId,
+        error: updateError instanceof Error ? updateError.message : String(updateError),
+      });
+      // Continue anyway - the graph is persisted to file
+    }
 
     return NextResponse.json({
       featureGraph: graph,
