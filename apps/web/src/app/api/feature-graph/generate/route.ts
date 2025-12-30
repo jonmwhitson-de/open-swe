@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Client } from "@langchain/langgraph-sdk";
 import { LOCAL_MODE_HEADER } from "@openswe/shared/constants";
-import type { ManagerGraphState } from "@openswe/shared/open-swe/manager/types";
-import type { GraphConfig } from "@openswe/shared/open-swe/types";
-import { getCustomConfigurableFields } from "@openswe/shared/open-swe/utils/config";
 import { createLogger, LogLevel } from "@openswe/shared/logger";
 
 import { mapFeatureGraphPayload } from "@/lib/feature-graph-payload";
@@ -18,7 +14,7 @@ function resolveApiUrl(): string {
   );
 }
 
-function resolveThreadId(value: unknown): string | null {
+function resolveWorkspacePath(value: unknown): string | null {
   if (typeof value === "string" && value.trim()) {
     return value.trim();
   }
@@ -33,12 +29,10 @@ function resolvePrompt(value: unknown): string {
 }
 
 async function requestGraphGeneration({
-  threadId,
   workspaceAbsPath,
   prompt,
   configurable,
 }: {
-  threadId: string;
   workspaceAbsPath: string;
   prompt: string;
   configurable?: Record<string, unknown>;
@@ -58,7 +52,6 @@ async function requestGraphGeneration({
   }
 
   logger.info("Requesting feature graph generation", {
-    threadId,
     workspaceAbsPath,
     configurablePresent: Boolean(configurable),
   });
@@ -80,7 +73,6 @@ async function requestGraphGeneration({
     payload = rawBody ? JSON.parse(rawBody) : null;
   } catch (error) {
     logger.warn("Failed to parse feature graph generation response", {
-      threadId,
       workspaceAbsPath,
       error,
     });
@@ -112,13 +104,16 @@ function redactMessage(message: string, workspaceAbsPath?: string): string {
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json();
-    const threadId =
-      resolveThreadId(body?.thread_id) ?? resolveThreadId(body?.threadId);
+    const workspaceAbsPath =
+      resolveWorkspacePath(body?.workspace_path) ??
+      resolveWorkspacePath(body?.workspacePath) ??
+      resolveWorkspacePath(body?.workspaceAbsPath);
     const prompt = resolvePrompt(body?.prompt);
+    const configurable = body?.configurable as Record<string, unknown> | undefined;
 
-    if (!threadId) {
+    if (!workspaceAbsPath) {
       return NextResponse.json(
-        { error: "thread_id is required" },
+        { error: "workspace_path is required" },
         { status: 400 },
       );
     }
@@ -130,82 +125,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const client = new Client({
-      apiUrl: resolveApiUrl(),
-      defaultHeaders:
-        process.env.OPEN_SWE_LOCAL_MODE === "true"
-          ? { [LOCAL_MODE_HEADER]: "true" }
-          : undefined,
-    });
-
-    // Retry getState with exponential backoff if thread is busy
-    const maxRetries = 3;
-    let lastError: unknown = null;
-    let managerState = null;
-
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        managerState = await client.threads.getState<ManagerGraphState>(threadId);
-        break; // Success, exit retry loop
-      } catch (error) {
-        lastError = error;
-        const status = (error as { status?: number })?.status;
-
-        // Only retry on 409 (thread busy) errors
-        if (status === 409 && attempt < maxRetries - 1) {
-          const delay = Math.pow(2, attempt) * 500; // 500ms, 1000ms, 2000ms
-          logger.warn(`Thread busy, retrying getState in ${delay}ms`, {
-            threadId,
-            attempt: attempt + 1,
-            maxRetries,
-          });
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          continue;
-        }
-
-        // Non-retryable error or final attempt
-        logger.error("Failed to load manager state for feature graph", {
-          threadId,
-          status,
-          error,
-        });
-        break;
-      }
-    }
-
-    if (!managerState?.values) {
-      const status = (lastError as { status?: number })?.status ?? 404;
-      const message = status === 409
-        ? "Thread is busy, please try again later"
-        : status === 404
-          ? "Manager state not found for thread"
-          : "Failed to load manager state";
-      return NextResponse.json({ error: message }, { status });
-    }
-
-    const workspaceAbsPath =
-      managerState.values.workspaceAbsPath ?? managerState.values.workspacePath;
-    if (!workspaceAbsPath) {
-      return NextResponse.json(
-        { error: "Workspace path unavailable for this thread" },
-        { status: 400 },
-      );
-    }
-
-    const configurableFields =
-      getCustomConfigurableFields({
-        configurable: managerState.metadata
-          ?.configurable as GraphConfig["configurable"],
-      } as GraphConfig) ?? {};
-
+    // Generate feature graph directly using workspace path - no thread state access needed
+    // This eliminates 409 "thread busy" errors
     const generation = await requestGraphGeneration({
-      threadId,
       workspaceAbsPath,
       prompt,
-      configurable:
-        Object.keys(configurableFields).length > 0
-          ? configurableFields
-          : undefined,
+      configurable,
     });
 
     if (!generation.ok) {
@@ -230,7 +155,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     if (!graph) {
       logger.error("Feature graph generation payload was invalid", {
-        threadId,
         workspaceAbsPath,
         payload,
       });
@@ -241,30 +165,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Only update activeFeatureIds in state - don't store featureGraph in state
-    // to avoid state growing too large. The graph is persisted to file by the
-    // backend generation service and loaded from file when needed.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { featureGraph: _excludedGraph, ...restManagerState } = managerState.values;
-
-    // Try to update state, but don't fail the whole operation if thread is busy.
-    // The graph is already persisted to file, so activeFeatureIds update is nice-to-have.
-    try {
-      await client.threads.updateState<ManagerGraphState>(threadId, {
-        values: {
-          ...restManagerState,
-          activeFeatureIds,
-        },
-        asNode: "feature-graph-orchestrator",
-      });
-    } catch (updateError) {
-      logger.warn("Failed to update thread state after generation (thread may be busy)", {
-        threadId,
-        error: updateError instanceof Error ? updateError.message : String(updateError),
-      });
-      // Continue anyway - the graph is persisted to file
-    }
-
+    // The graph is persisted to file by the backend generation service.
+    // activeFeatureIds are returned to the caller who can store them locally.
     return NextResponse.json({
       featureGraph: graph,
       activeFeatureIds,
