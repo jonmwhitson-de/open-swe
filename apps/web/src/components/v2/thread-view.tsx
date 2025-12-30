@@ -308,7 +308,21 @@ export function ThreadView({
   const clearFeatureGraph = useFeatureGraphStore((state) => state.clear);
 
   // Get workspace path from stream values for loading feature graph
-  const workspacePath = stream.values?.workspacePath || stream.values?.workspaceAbsPath;
+  // Fall back to sessionStorage if stream.values doesn't have it (e.g., if thread state failed to load)
+  const workspacePath = useMemo(() => {
+    const fromStream = stream.values?.workspacePath || stream.values?.workspaceAbsPath;
+    if (fromStream) return fromStream;
+
+    // Fallback to sessionStorage for cases where thread state fails to load
+    if (typeof window !== "undefined" && displayThread.id) {
+      try {
+        return sessionStorage.getItem(`lg:workspace-path:${displayThread.id}`) ?? undefined;
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }, [stream.values?.workspacePath, stream.values?.workspaceAbsPath, displayThread.id]);
 
   const fetchFeatureGraphForWorkspaceRef = useRef(fetchFeatureGraphForWorkspace);
   const clearFeatureGraphRef = useRef(clearFeatureGraph);
@@ -843,9 +857,7 @@ export function ThreadView({
 
   const hasInterrupt = Boolean(stream.interrupt);
 
-  const hasWorkspacePath = Boolean(
-    stream.values?.workspacePath || stream.values?.workspaceAbsPath,
-  );
+  const hasWorkspacePath = Boolean(workspacePath);
 
   const allowAutoFeatureGraphGeneration = useMemo(
     () =>
