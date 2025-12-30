@@ -157,13 +157,17 @@ export async function classifyMessage(
   const requestSource = userMessage.additional_kwargs?.requestSource;
   const isChatSession =
     requestSource === "open-swe" || requestSource === "local-user";
-  const graphEditIntent = /\b(propos(e|al)|approve|reject)\b/i.test(
+  // Match common feature graph modification intents:
+  // - propose/proposal/approve/reject for proposal workflow
+  // - add/create/remove/delete/modify/update for direct modifications
+  const graphEditIntent = /\b(propos(e|al)|approve|reject|add|create|remove|delete|modify|update)\s+(a\s+)?(new\s+)?feature/i.test(
     userMessageContent,
-  );
+  ) || /\b(propos(e|al)|approve|reject)\b/i.test(userMessageContent);
 
   if (isChatSession && graphEditIntent) {
+    // Route to feature-graph-agent for direct graph modifications
     return new Command({
-      goto: "feature-graph-orchestrator",
+      goto: "feature-graph-agent",
     });
   }
 
@@ -350,6 +354,7 @@ export async function classifyMessage(
   if (phase === "design") {
     const allowedDesignRoutes = new Set([
       "feature_graph_orchestrator",
+      "feature_graph_agent",
       "no_op",
     ]);
 
@@ -388,9 +393,11 @@ export async function classifyMessage(
     });
 
     if (phase === "design") {
+      // In design phase, route to feature-graph-agent for direct graph modifications
+      // instead of END, so users can add/remove/modify features via conversation
       return new Command({
         update: commandUpdate,
-        goto: END,
+        goto: "feature-graph-agent",
       });
     }
 
