@@ -623,6 +623,71 @@ export function registerFeatureGraphRoute(app: Hono) {
       message,
     });
   });
+
+  /**
+   * Mark a feature as completed after development finishes.
+   * Updates the feature status to "completed" and removes it from activeFeatureIds.
+   */
+  app.post("/feature-graph/complete", async (ctx) => {
+    let body: { workspace_path?: unknown; feature_id?: unknown } | null = null;
+
+    try {
+      body = await ctx.req.json();
+    } catch {
+      return ctx.json(
+        { error: "Invalid JSON payload" },
+        400 as ContentfulStatusCode,
+      );
+    }
+
+    const workspacePath = resolveWorkspacePath(body);
+    const featureId = typeof body?.feature_id === "string" ? body.feature_id.trim() : null;
+
+    if (!workspacePath) {
+      return ctx.json(
+        { error: "workspace_path is required" },
+        400 as ContentfulStatusCode,
+      );
+    }
+
+    if (!featureId) {
+      return ctx.json(
+        { error: "feature_id is required" },
+        400 as ContentfulStatusCode,
+      );
+    }
+
+    // Load feature graph from file
+    const featureGraph = await loadFeatureGraphFromFile(workspacePath);
+    if (!featureGraph) {
+      return ctx.json(
+        { error: "Feature graph not found" },
+        404 as ContentfulStatusCode,
+      );
+    }
+
+    // Check if feature exists
+    const feature = featureGraph.getFeature(featureId);
+    if (!feature) {
+      return ctx.json(
+        { error: `Feature "${featureId}" not found in graph` },
+        404 as ContentfulStatusCode,
+      );
+    }
+
+    // Update feature status to completed
+    const updatedGraph = applyFeatureStatus(featureGraph, featureId, "completed");
+    await persistFeatureGraph(updatedGraph, workspacePath);
+
+    logger.info("Marked feature as completed", { featureId, workspacePath });
+
+    return ctx.json({
+      success: true,
+      featureId,
+      status: "completed",
+      featureGraph: updatedGraph.toJSON(),
+    });
+  });
 }
 
 function resolveThreadId(
@@ -733,6 +798,17 @@ function addActiveFeatureId(
   }
 
   return [trimmedId, ...normalizedExisting];
+}
+
+function removeActiveFeatureId(
+  existing: string[] | undefined,
+  featureId: string,
+): string[] {
+  const normalizedExisting = normalizeFeatureIds(existing);
+  const trimmedId = featureId.trim().toLowerCase();
+  if (!trimmedId) return normalizedExisting;
+
+  return normalizedExisting.filter((entry) => entry.toLowerCase() !== trimmedId);
 }
 
 function normalizeFeatureIds(value: string[] | undefined): string[] {

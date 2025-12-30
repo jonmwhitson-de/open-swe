@@ -112,6 +112,11 @@ interface FeatureGraphStoreState {
       error?: string;
     },
   ) => void;
+  /**
+   * Mark a feature as completed in the graph.
+   * Updates the feature status to "completed" and removes from activeFeatureIds.
+   */
+  completeFeature: (featureId: string) => Promise<void>;
   selectFeature: (featureId: string | null) => void;
   setActiveFeatureIds: (featureIds?: string[] | null) => void;
   setDesignThreadId: (designThreadId: string | null) => void;
@@ -130,6 +135,7 @@ const INITIAL_STATE: Omit<
     | "startDesignDevelopment"
     | "respondToProposal"
     | "setFeatureRunStatus"
+    | "completeFeature"
     | "selectFeature"
     | "setActiveFeatureIds"
     | "setDesignThreadId"
@@ -464,8 +470,14 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
       set((state) => {
         const current = state.featureRuns[featureId];
 
+        // Remove from activeFeatureIds if completed
+        const activeFeatureIds = status === "completed"
+          ? state.activeFeatureIds.filter((id) => id !== featureId)
+          : state.activeFeatureIds;
+
         return {
           ...state,
+          activeFeatureIds,
           featureRuns: {
             ...state.featureRuns,
             [featureId]: {
@@ -478,6 +490,60 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
           },
         };
       });
+
+      // If completed, persist the completion to the backend
+      if (status === "completed") {
+        get().completeFeature(featureId).catch((error) => {
+          console.error("Failed to persist feature completion:", error);
+        });
+      }
+    },
+    async completeFeature(featureId) {
+      const { workspacePath, featuresById } = get();
+
+      if (!workspacePath || !featureId || !featuresById[featureId]) {
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/feature-graph/complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspace_path: workspacePath,
+            feature_id: featureId,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error ?? "Failed to mark feature as completed");
+        }
+
+        // Update local feature status
+        set((state) => {
+          const feature = state.featuresById[featureId];
+          if (!feature) return state;
+
+          const updatedFeature = { ...feature, status: "completed" };
+          const updatedFeaturesById = {
+            ...state.featuresById,
+            [featureId]: updatedFeature,
+          };
+          const updatedFeatures = state.features.map((f) =>
+            f.id === featureId ? updatedFeature : f,
+          );
+
+          return {
+            ...state,
+            features: updatedFeatures,
+            featuresById: updatedFeaturesById,
+          };
+        });
+      } catch (error) {
+        console.error("Failed to complete feature:", error);
+        throw error;
+      }
     },
     selectFeature(featureId) {
       if (!featureId) {
