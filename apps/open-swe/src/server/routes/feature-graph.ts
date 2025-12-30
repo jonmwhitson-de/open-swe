@@ -800,17 +800,6 @@ function addActiveFeatureId(
   return [trimmedId, ...normalizedExisting];
 }
 
-function removeActiveFeatureId(
-  existing: string[] | undefined,
-  featureId: string,
-): string[] {
-  const normalizedExisting = normalizeFeatureIds(existing);
-  const trimmedId = featureId.trim().toLowerCase();
-  if (!trimmedId) return normalizedExisting;
-
-  return normalizedExisting.filter((entry) => entry.toLowerCase() !== trimmedId);
-}
-
 function normalizeFeatureIds(value: string[] | undefined): string[] {
   if (!Array.isArray(value)) return [];
 
