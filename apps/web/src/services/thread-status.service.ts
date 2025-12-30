@@ -451,18 +451,23 @@ async function performFullStatusCheck(
     programmerCacheKey,
   );
 
-  if (cachedProgrammerData?.programmerData) {
+  // Always fetch fresh data when programmer is running to get latest task completion status
+  const shouldUseCachedData = cachedProgrammerData?.programmerData &&
+    cachedProgrammerData.programmerData.thread.status !== "busy";
+
+  if (shouldUseCachedData) {
     programmerThread = cachedProgrammerData.programmerData.thread;
   } else {
     programmerThread = await client.threads.get<GraphState>(
       programmerSession.threadId,
     );
 
-    // No run fetch needed - we only check task completion from thread data
-
-    setCachedSessionData(sessionCache, programmerCacheKey, {
-      programmerData: { thread: programmerThread },
-    });
+    // Only cache if thread is idle - don't cache running threads as taskPlan changes frequently
+    if (programmerThread.status === "idle") {
+      setCachedSessionData(sessionCache, programmerCacheKey, {
+        programmerData: { thread: programmerThread },
+      });
+    }
   }
 
   // Use thread status directly for most cases

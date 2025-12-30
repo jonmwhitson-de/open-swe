@@ -337,20 +337,28 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
           featureId,
         );
 
-        set((state) => ({
-          ...state,
-          selectedFeatureId: featureId,
-          featureRuns: {
-            ...state.featureRuns,
-            [featureId]: {
-              threadId: plannerThreadId,
-              runId,
-              status: "running",
-              error: null,
-              updatedAt: Date.now(),
+        set((state) => {
+          // Add featureId to activeFeatureIds if not already present
+          const newActiveFeatureIds = state.activeFeatureIds.includes(featureId)
+            ? state.activeFeatureIds
+            : [...state.activeFeatureIds, featureId];
+
+          return {
+            ...state,
+            selectedFeatureId: featureId,
+            activeFeatureIds: newActiveFeatureIds,
+            featureRuns: {
+              ...state.featureRuns,
+              [featureId]: {
+                threadId: plannerThreadId,
+                runId,
+                status: "running",
+                error: null,
+                updatedAt: Date.now(),
+              },
             },
-          },
-        }));
+          };
+        });
       } catch (error) {
         const baseMessage =
           error instanceof Error
@@ -582,13 +590,23 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
           };
         }
 
-        set((state) => ({
-          ...state,
-          featureRuns: {
-            ...state.featureRuns,
-            ...runningStates,
-          },
-        }));
+        set((state) => {
+          // Add featureIds to activeFeatureIds if not already present
+          const existingIds = new Set(state.activeFeatureIds);
+          const newActiveFeatureIds = [
+            ...state.activeFeatureIds,
+            ...featureIds.filter((id) => !existingIds.has(id)),
+          ];
+
+          return {
+            ...state,
+            activeFeatureIds: newActiveFeatureIds,
+            featureRuns: {
+              ...state.featureRuns,
+              ...runningStates,
+            },
+          };
+        });
 
         return { plannerThreadId, runId };
       } catch (error) {
