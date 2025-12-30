@@ -36,6 +36,7 @@ import {
   LOCAL_MODE_HEADER,
 } from "@openswe/shared/constants";
 import { useThreadStatus } from "@/hooks/useThreadStatus";
+import { useLocalRepositories } from "@/hooks/useLocalRepositories";
 import { cn } from "@/lib/utils";
 
 import {
@@ -161,6 +162,9 @@ export function ThreadView({
   // Track when we're waiting for a run to start after submitting a message.
   // This prevents auto-generation from racing with the just-submitted run.
   const isAwaitingRunStartRef = useRef(false);
+
+  // Get local repositories for workspace path fallback
+  const { repositories } = useLocalRepositories("");
 
   const {
     status: realTimeStatus,
@@ -308,21 +312,30 @@ export function ThreadView({
   const clearFeatureGraph = useFeatureGraphStore((state) => state.clear);
 
   // Get workspace path from stream values for loading feature graph
-  // Fall back to sessionStorage if stream.values doesn't have it (e.g., if thread state failed to load)
+  // Fall back to sessionStorage or repository lookup if stream.values doesn't have it
   const workspacePath = useMemo(() => {
+    // First, try to get from stream values
     const fromStream = stream.values?.workspacePath || stream.values?.workspaceAbsPath;
     if (fromStream) return fromStream;
 
     // Fallback to sessionStorage for cases where thread state fails to load
     if (typeof window !== "undefined" && displayThread.id) {
       try {
-        return sessionStorage.getItem(`lg:workspace-path:${displayThread.id}`) ?? undefined;
+        const fromStorage = sessionStorage.getItem(`lg:workspace-path:${displayThread.id}`);
+        if (fromStorage) return fromStorage;
       } catch {
-        return undefined;
+        // Ignore sessionStorage errors
       }
     }
+
+    // Final fallback: look up workspace path from repository name
+    if (displayThread.repository && repositories.length > 0) {
+      const repo = repositories.find((r) => r.name === displayThread.repository);
+      if (repo?.path) return repo.path;
+    }
+
     return undefined;
-  }, [stream.values?.workspacePath, stream.values?.workspaceAbsPath, displayThread.id]);
+  }, [stream.values?.workspacePath, stream.values?.workspaceAbsPath, displayThread.id, displayThread.repository, repositories]);
 
   const fetchFeatureGraphForWorkspaceRef = useRef(fetchFeatureGraphForWorkspace);
   const clearFeatureGraphRef = useRef(clearFeatureGraph);
