@@ -33,12 +33,29 @@ import { FEATURE_GRAPH_RELATIVE_PATH } from "../utils/feature-graph-path.js";
 const logger = createLogger(LogLevel.INFO, "FeatureGraphAgent");
 
 const FEATURE_AGENT_SYSTEM_PROMPT = `You are the dedicated feature-graph concierge for Open SWE.
+
+IMPORTANT: You MUST use tools to respond. Always call one of the provided tools.
+
+When the user wants to ADD a new feature:
+- Use create_feature with a unique featureId (e.g., "feature-user-auth"), descriptive name, and summary
+
+When the user wants to PROPOSE changes to an existing feature:
+- Use propose_feature_change with the featureId, summary, and a user-facing response
+
+When the user APPROVES a proposal:
+- Use approve_feature_change with the featureId to mark it as active
+
+When the user REJECTS a proposal:
+- Use reject_feature_change with the featureId to mark it as rejected
+
+When you need more information or the request doesn't involve graph changes:
+- Use reply_without_change with a clarifying question
+
+Guidelines:
 - Maintain an explicit propose/approve/reject loop with the user instead of jumping into planning.
 - Persist proposal state across turns so the user can approve or reject later.
 - Only mutate the feature graph through the provided tools; summarize every mutation in your response.
-- Use the create_feature tool to add new features before proposing updates for them.
-- When proposing, explain the next approval step. When approving or rejecting, confirm the status change.
-- If the feature graph is missing, ask for the workspace to be resolved or a graph to be generated.`;
+- If the feature graph is missing, use reply_without_change to ask for the workspace to be resolved.`;
 
 const createFeatureSchema = z.object({
   featureId: z.string(),
@@ -263,10 +280,18 @@ export async function featureGraphAgent(
     LLMTask.ROUTER,
   );
   const modelWithTools = model.bindTools(tools, {
-    tool_choice: "auto",
+    // Force the model to call at least one tool to ensure features are created/modified
+    tool_choice: "required",
     ...(modelSupportsParallelToolCallsParam
       ? { parallel_tool_calls: false }
       : {}),
+  });
+
+  logger.info("Invoking feature graph agent", {
+    workspacePath: state.workspacePath,
+    hasFeatureGraph: Boolean(featureGraph),
+    featureCount: featureGraph?.listFeatures().length ?? 0,
+    userMessage: getMessageContentString(userMessage.content).slice(0, 100),
   });
 
   const aiMessage = await modelWithTools.invoke([
@@ -276,6 +301,12 @@ export async function featureGraphAgent(
       content: getMessageContentString(userMessage.content),
     },
   ]);
+
+  logger.info("Feature graph agent LLM response", {
+    hasToolCalls: Boolean(aiMessage.tool_calls?.length),
+    toolCallCount: aiMessage.tool_calls?.length ?? 0,
+    toolNames: aiMessage.tool_calls?.map((tc) => tc.name) ?? [],
+  });
 
   let updatedGraph = featureGraph;
   let updatedProposals = proposalState;
@@ -310,6 +341,12 @@ export async function featureGraphAgent(
             },
             state.workspacePath,
           );
+
+          logger.info("Created feature node", {
+            featureId: args.featureId,
+            name: args.name,
+            workspacePath: state.workspacePath,
+          });
 
           const response = `Added ${args.name} (${args.featureId}) to the feature graph.`;
           toolMessages.push(recordAction(toolCall.name, toolCallId, response));
