@@ -813,7 +813,10 @@ export function ThreadView({
     } finally {
       stream.stop();
       try {
-        await fetchFeatureGraphForThreadRef.current(threadId, { force: true });
+        const currentWorkspacePath = stream.values?.workspacePath || stream.values?.workspaceAbsPath;
+        if (currentWorkspacePath) {
+          await fetchFeatureGraphForWorkspaceRef.current(currentWorkspacePath, { force: true });
+        }
       } catch {
         // no-op
       }
