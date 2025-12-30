@@ -84,7 +84,7 @@ export function FeatureInsightsPanel({
     threadId,
     workspacePath,
     fetchGraphForWorkspace,
-    requestGraphGeneration,
+    generateGraph,
     startFeatureDevelopment,
     selectFeature,
     respondToProposal,
@@ -107,7 +107,7 @@ export function FeatureInsightsPanel({
       threadId: state.threadId,
       workspacePath: state.workspacePath,
       fetchGraphForWorkspace: state.fetchGraphForWorkspace,
-      requestGraphGeneration: state.requestGraphGeneration,
+      generateGraph: state.generateGraph,
       startFeatureDevelopment: state.startFeatureDevelopment,
       selectFeature: state.selectFeature,
       respondToProposal: state.respondToProposal,
@@ -179,8 +179,9 @@ export function FeatureInsightsPanel({
   };
 
   const handleGenerate = () => {
-    if (threadId) {
-      void requestGraphGeneration(threadId);
+    if (workspacePath) {
+      // Use workspace path directly to avoid thread state access and 409 errors
+      void generateGraph(workspacePath, "Generate feature graph for this workspace");
     }
   };
 
