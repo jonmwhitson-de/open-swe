@@ -706,7 +706,10 @@ function FeatureDevelopmentPanel({
   const status = runState?.status ?? "idle";
   const isRunning = status === "running" || status === "starting";
   const isBlocked = status === "error";
-  const isDisabled = isRunning || isBlocked;
+  const isCompleted = status === "completed" ||
+    feature.status?.toLowerCase() === "completed" ||
+    feature.status?.toLowerCase() === "complete";
+  const isDisabled = isRunning || isBlocked || isCompleted;
 
   return (
     <div className="border-border/70 bg-muted/20 rounded-md border p-3">
@@ -718,7 +721,9 @@ function FeatureDevelopmentPanel({
               Feature development
             </span>
             <span className="text-muted-foreground text-xs">
-              Launch a dedicated planner run to work on this feature.
+              {isCompleted
+                ? "This feature has been completed."
+                : "Launch a dedicated planner run to work on this feature."}
             </span>
           </div>
         </div>
@@ -726,12 +731,17 @@ function FeatureDevelopmentPanel({
           size="sm"
           onClick={onStart}
           disabled={isDisabled}
-          variant={status === "error" ? "destructive" : "default"}
+          variant={isCompleted ? "secondary" : status === "error" ? "destructive" : "default"}
         >
           {isRunning ? (
             <span className="flex items-center gap-2">
               <Loader2 className="size-4 animate-spin" />
               {status === "starting" ? "Starting" : "Running"}
+            </span>
+          ) : isCompleted ? (
+            <span className="flex items-center gap-2">
+              <CheckCircle2 className="size-4" />
+              Completed
             </span>
           ) : (
             "Start development"
