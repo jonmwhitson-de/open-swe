@@ -128,28 +128,18 @@ export async function classifyMessage(
   const featureGraph = await loadFeatureGraphFromFile(state.workspacePath);
 
   if (isLockInFeature && phase === "design") {
-    logger.info("User locked in feature - proceeding without further clarification", {
+    logger.info("User locked in feature - routing to feature-graph-agent to create feature", {
       hasFeatureGraph: Boolean(featureGraph),
     });
 
-    // Always route to END when locking in - this lets the run complete cleanly
-    // and allows the UI to handle feature graph generation without conflicts.
-    // Don't route to feature-graph-orchestrator as it can cause "thread busy" errors
-    // when the orchestrator's feature-planner call conflicts with frontend operations.
-    const acknowledgmentMessage = new AIMessage({
-      content: "Got it! I've noted your requirements. You can now generate the feature graph based on our discussion.",
-      additional_kwargs: {
-        phase,
-        lockInAcknowledged: true,
-      },
-    });
-
+    // Route to feature-graph-agent to create the feature based on the conversation.
+    // The agent will use the conversation history to understand what feature was discussed
+    // and create it in the graph.
     return new Command({
       update: {
-        messages: [acknowledgmentMessage],
         userHasApprovedFeature: true,
       },
-      goto: END,
+      goto: "feature-graph-agent",
     });
   }
 

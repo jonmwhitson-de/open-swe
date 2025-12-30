@@ -228,6 +228,38 @@ const recordAction = (
 
 const nowIso = () => new Date().toISOString();
 
+/**
+ * Format conversation history for the agent to understand context.
+ * Only includes the last few messages to keep context manageable.
+ */
+const formatConversationHistory = (messages: BaseMessage[]): string => {
+  // Get the last 10 messages (excluding the current one)
+  const recentMessages = messages.slice(-11, -1);
+
+  if (recentMessages.length === 0) {
+    return "No prior conversation.";
+  }
+
+  const formatted = recentMessages.map((msg) => {
+    const role = isHumanMessage(msg) ? "User" : "Assistant";
+    const content = getMessageContentString(msg.content);
+    // Truncate long messages
+    const truncated = content.length > 500 ? content.slice(0, 500) + "..." : content;
+    return `${role}: ${truncated}`;
+  });
+
+  return formatted.join("\n\n");
+};
+
+/**
+ * Check if this is a "lock in" request where the user wants to finalize the feature.
+ */
+const isLockInRequest = (message: BaseMessage): boolean => {
+  const content = getMessageContentString(message.content);
+  return content.includes("[LOCK_IN_FEATURE]") ||
+    (message.additional_kwargs?.lockInFeature === true);
+};
+
 export async function featureGraphAgent(
   state: ManagerGraphState,
   config: GraphConfig,
@@ -242,7 +274,17 @@ export async function featureGraphAgent(
   // Load feature graph from file instead of state to avoid storing it in state.
   // This prevents state from growing too large and causing serialization errors.
   const featureGraph = await initializeFeatureGraph(state.workspacePath);
-  const systemPrompt = `${FEATURE_AGENT_SYSTEM_PROMPT}\n\n# Current Proposals\n${formatProposals(proposalState)}\n\n# Feature Graph\n${formatFeatureCatalog(featureGraph, state.activeFeatureIds)}`;
+
+  // Check if this is a lock-in request
+  const isLockIn = isLockInRequest(userMessage);
+
+  // Build the system prompt with conversation history for context
+  const conversationHistory = formatConversationHistory(state.messages);
+  const lockInInstruction = isLockIn
+    ? "\n\n# IMPORTANT: Lock-in Request\nThe user has clicked 'Lock in feature'. Based on the conversation history above, you MUST use the create_feature tool to add the discussed feature to the graph. Extract the feature name and description from the conversation and create it now."
+    : "";
+
+  const systemPrompt = `${FEATURE_AGENT_SYSTEM_PROMPT}\n\n# Conversation History\n${conversationHistory}\n\n# Current Proposals\n${formatProposals(proposalState)}\n\n# Feature Graph\n${formatFeatureCatalog(featureGraph, state.activeFeatureIds)}${lockInInstruction}`;
 
   const tools = [
     {
@@ -291,6 +333,7 @@ export async function featureGraphAgent(
     workspacePath: state.workspacePath,
     hasFeatureGraph: Boolean(featureGraph),
     featureCount: featureGraph?.listFeatures().length ?? 0,
+    isLockIn,
     userMessage: getMessageContentString(userMessage.content).slice(0, 100),
   });
 
