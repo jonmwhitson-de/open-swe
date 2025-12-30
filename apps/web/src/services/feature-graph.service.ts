@@ -1,7 +1,6 @@
 import { Client } from "@langchain/langgraph-sdk";
 import { MANAGER_GRAPH_ID } from "@openswe/shared/constants";
 import type { ManagerGraphState } from "@openswe/shared/open-swe/manager/types";
-
 import { createClient } from "@/providers/client";
 import {
   FeatureGraphFetchResult,
@@ -14,23 +13,21 @@ export interface FeatureDevelopmentResponse {
 }
 
 /**
- * Fetch feature graph data for a thread by calling the backend load endpoint.
- * This avoids reading the graph from thread state, preventing serialization issues.
+ * Fetch feature graph data using workspace path directly.
+ * No thread state access needed - eliminates 409 "thread busy" errors.
  *
- * Returns a result with null graph for expected "not ready" states (404, 409).
+ * Returns a result with null graph for expected "not ready" states (404).
  * Only throws for unexpected errors.
  */
 export async function fetchFeatureGraph(
-  threadId: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _client?: Client<ManagerGraphState>,
+  workspacePath: string,
 ): Promise<FeatureGraphFetchResult> {
-  if (!threadId) {
-    throw new Error("Thread id is required to fetch feature graph data");
+  if (!workspacePath) {
+    throw new Error("Workspace path is required to fetch feature graph data");
   }
 
-  // Call the state API which now proxies to the backend /feature-graph/load endpoint
-  const response = await fetch(`/api/feature-graph/state?thread_id=${encodeURIComponent(threadId)}`, {
+  // Call the state API which loads directly from file - no thread state access
+  const response = await fetch(`/api/feature-graph/state?workspace_path=${encodeURIComponent(workspacePath)}`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -40,8 +37,7 @@ export async function fetchFeatureGraph(
   if (!response.ok) {
     // Handle expected "not ready" states gracefully - return empty result
     // 404: Graph not generated yet
-    // 409: Thread is busy (run in progress)
-    if (response.status === 404 || response.status === 409) {
+    if (response.status === 404) {
       return {
         graph: null,
         activeFeatureIds: [],
@@ -63,9 +59,11 @@ export async function fetchFeatureGraph(
   // Map the response to our expected format
   const result = mapFeatureGraphPayload({
     featureGraph: payload.feature_graph,
-    activeFeatureIds: payload.active_feature_ids,
-    featureProposals: payload.feature_proposals?.proposals,
-    activeProposalId: payload.feature_proposals?.activeProposalId,
+    // activeFeatureIds and proposals are now managed separately via thread state
+    // when needed, not through the graph load endpoint
+    activeFeatureIds: [],
+    featureProposals: [],
+    activeProposalId: null,
   });
 
   return result;

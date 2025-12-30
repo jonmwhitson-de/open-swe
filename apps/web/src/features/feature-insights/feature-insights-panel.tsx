@@ -82,7 +82,8 @@ export function FeatureInsightsPanel({
     isGeneratingGraph,
     error,
     threadId,
-    fetchGraphForThread,
+    workspacePath,
+    fetchGraphForWorkspace,
     requestGraphGeneration,
     startFeatureDevelopment,
     selectFeature,
@@ -104,7 +105,8 @@ export function FeatureInsightsPanel({
       isGeneratingGraph: state.isGeneratingGraph,
       error: state.error,
       threadId: state.threadId,
-      fetchGraphForThread: state.fetchGraphForThread,
+      workspacePath: state.workspacePath,
+      fetchGraphForWorkspace: state.fetchGraphForWorkspace,
       requestGraphGeneration: state.requestGraphGeneration,
       startFeatureDevelopment: state.startFeatureDevelopment,
       selectFeature: state.selectFeature,
@@ -171,8 +173,8 @@ export function FeatureInsightsPanel({
     : [];
 
   const handleRetry = () => {
-    if (threadId) {
-      void fetchGraphForThread(threadId, { force: true });
+    if (workspacePath) {
+      void fetchGraphForWorkspace(workspacePath, { force: true });
     }
   };
 

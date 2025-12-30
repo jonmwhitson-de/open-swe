@@ -56,6 +56,8 @@ type ProposalActionState = {
 
 interface FeatureGraphStoreState {
   threadId: string | null;
+  /** Workspace path for loading the feature graph from file */
+  workspacePath: string | null;
   /** Optional design thread ID for isolated feature design */
   designThreadId: string | null;
   graph: FeatureGraph | null;
@@ -72,6 +74,15 @@ interface FeatureGraphStoreState {
   isLoading: boolean;
   isGeneratingGraph: boolean;
   error: string | null;
+  /**
+   * Fetch feature graph using workspace path directly.
+   * No thread state access needed - eliminates 409 "thread busy" errors.
+   */
+  fetchGraphForWorkspace: (
+    workspacePath: string,
+    options?: { force?: boolean },
+  ) => Promise<void>;
+  /** @deprecated Use fetchGraphForWorkspace instead */
   fetchGraphForThread: (
     threadId: string,
     options?: { force?: boolean },
@@ -109,6 +120,7 @@ interface FeatureGraphStoreState {
 
 const INITIAL_STATE: Omit<
     FeatureGraphStoreState,
+    | "fetchGraphForWorkspace"
     | "fetchGraphForThread"
     | "generateGraph"
     | "requestGraphGeneration"
@@ -122,6 +134,7 @@ const INITIAL_STATE: Omit<
     | "clear"
   > = {
   threadId: null,
+  workspacePath: null,
   designThreadId: null,
   graph: null,
   features: [],
@@ -142,33 +155,39 @@ const INITIAL_STATE: Omit<
 export const useFeatureGraphStore = create<FeatureGraphStoreState>(
   (set, get) => ({
     ...INITIAL_STATE,
-    async fetchGraphForThread(threadId, options) {
-      const { threadId: currentThreadId, isLoading, graph } = get();
+    /**
+     * Fetch feature graph using workspace path directly.
+     * No thread state access needed - eliminates 409 "thread busy" errors.
+     */
+    async fetchGraphForWorkspace(workspacePath, options) {
+      const { workspacePath: currentPath, isLoading, graph } = get();
       const shouldSkip =
-        !threadId ||
+        !workspacePath ||
         (!options?.force &&
-          threadId === currentThreadId &&
+          workspacePath === currentPath &&
           (graph !== null || isLoading));
 
       if (shouldSkip) return;
 
       set((state) => ({
         ...INITIAL_STATE,
-        threadId,
+        threadId: state.threadId, // Preserve threadId for other operations
+        workspacePath,
         isLoading: true,
         isGeneratingGraph: state.isGeneratingGraph,
       }));
 
       try {
-        const result = await fetchFeatureGraph(threadId);
+        const result = await fetchFeatureGraph(workspacePath);
         set((state) => mapFetchResultToState(state, result));
       } catch (error) {
         const message =
           error instanceof Error
             ? error.message
             : "Failed to load feature graph";
-        set({
-          threadId,
+        set((state) => ({
+          ...state,
+          workspacePath,
           isLoading: false,
           isGeneratingGraph: false,
           error: message,
@@ -182,8 +201,20 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
           activeProposalId: null,
           proposalActions: {},
           selectedFeatureId: null,
-        });
+        }));
       }
+    },
+    /**
+     * @deprecated Use fetchGraphForWorkspace instead.
+     * This method is kept for backwards compatibility but logs a warning.
+     */
+    async fetchGraphForThread(threadId, options) {
+      console.warn(
+        "[FeatureGraphStore] fetchGraphForThread is deprecated. Use fetchGraphForWorkspace with workspace path instead.",
+      );
+      // Store the threadId for other operations that still need it
+      set({ threadId });
+      // Cannot fetch without workspace path - this is a no-op now
     },
     async generateGraph(threadId, prompt) {
       const { isGeneratingGraph } = get();
@@ -244,14 +275,17 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
       }
     },
     async requestGraphGeneration(threadId) {
-      const { isGeneratingGraph } = get();
+      const { isGeneratingGraph, workspacePath } = get();
       if (!threadId || isGeneratingGraph) return;
 
       set({ isGeneratingGraph: true, threadId, error: null });
 
       try {
         await requestFeatureGraphGeneration(threadId);
-        await get().fetchGraphForThread(threadId, { force: true });
+        // After generation, reload the graph using workspace path if available
+        if (workspacePath) {
+          await get().fetchGraphForWorkspace(workspacePath, { force: true });
+        }
       } catch (error) {
         const message =
           error instanceof Error

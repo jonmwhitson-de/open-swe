@@ -296,8 +296,8 @@ export function ThreadView({
     selectedFeatureRunState?.error ??
     "Feature development run encountered an error.";
 
-  const fetchFeatureGraphForThread = useFeatureGraphStore(
-    (state) => state.fetchGraphForThread,
+  const fetchFeatureGraphForWorkspace = useFeatureGraphStore(
+    (state) => state.fetchGraphForWorkspace,
   );
   const generateFeatureGraph = useFeatureGraphStore(
     (state) => state.generateGraph,
@@ -307,26 +307,31 @@ export function ThreadView({
   );
   const clearFeatureGraph = useFeatureGraphStore((state) => state.clear);
 
-  const fetchFeatureGraphForThreadRef = useRef(fetchFeatureGraphForThread);
+  // Get workspace path from stream values for loading feature graph
+  const workspacePath = stream.values?.workspacePath || stream.values?.workspaceAbsPath;
+
+  const fetchFeatureGraphForWorkspaceRef = useRef(fetchFeatureGraphForWorkspace);
   const clearFeatureGraphRef = useRef(clearFeatureGraph);
 
   useEffect(() => {
-    fetchFeatureGraphForThreadRef.current = fetchFeatureGraphForThread;
-  }, [fetchFeatureGraphForThread]);
+    fetchFeatureGraphForWorkspaceRef.current = fetchFeatureGraphForWorkspace;
+  }, [fetchFeatureGraphForWorkspace]);
 
   useEffect(() => {
     clearFeatureGraphRef.current = clearFeatureGraph;
   }, [clearFeatureGraph]);
 
+  // Fetch feature graph using workspace path directly - no thread state access needed
+  // This eliminates 409 "thread busy" errors when loading the graph
   useEffect(() => {
-    if (displayThread.id) {
-      void fetchFeatureGraphForThreadRef.current(displayThread.id);
+    if (workspacePath) {
+      void fetchFeatureGraphForWorkspaceRef.current(workspacePath);
     }
 
     return () => {
       clearFeatureGraphRef.current();
     };
-  }, [displayThread.id]);
+  }, [workspacePath]);
 
 
   const featureRunStreamThreadId = selectedFeatureRunState?.threadId ?? undefined;

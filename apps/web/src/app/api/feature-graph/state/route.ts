@@ -12,7 +12,7 @@ function resolveApiUrl(): string {
   );
 }
 
-function resolveThreadId(value: unknown): string | null {
+function resolveWorkspacePath(value: unknown): string | null {
   if (typeof value === "string" && value.trim()) {
     return value.trim();
   }
@@ -21,9 +21,9 @@ function resolveThreadId(value: unknown): string | null {
 
 /**
  * Call the backend /feature-graph/load endpoint to load the graph from file.
- * This avoids reading the graph from state and prevents serialization issues.
+ * Uses workspace_path directly - no thread state access needed.
  */
-async function loadFeatureGraphFromBackend(threadId: string): Promise<{
+async function loadFeatureGraphFromBackend(workspacePath: string): Promise<{
   ok: boolean;
   status: number;
   data: unknown;
@@ -41,7 +41,7 @@ async function loadFeatureGraphFromBackend(threadId: string): Promise<{
     const response = await fetch(`${resolveApiUrl()}/feature-graph/load`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ thread_id: threadId }),
+      body: JSON.stringify({ workspace_path: workspacePath }),
     });
 
     const rawBody = await response.text();
@@ -50,7 +50,7 @@ async function loadFeatureGraphFromBackend(threadId: string): Promise<{
     try {
       data = rawBody ? JSON.parse(rawBody) : null;
     } catch {
-      logger.warn("Failed to parse feature graph load response", { threadId });
+      logger.warn("Failed to parse feature graph load response", { workspacePath });
     }
 
     if (!response.ok) {
@@ -66,7 +66,7 @@ async function loadFeatureGraphFromBackend(threadId: string): Promise<{
     return { ok: true, status: response.status, data };
   } catch (error) {
     logger.error("Failed to call feature graph load endpoint", {
-      threadId,
+      workspacePath,
       error: error instanceof Error ? error.message : String(error),
     });
 
@@ -80,23 +80,26 @@ async function loadFeatureGraphFromBackend(threadId: string): Promise<{
 }
 
 /**
- * GET /api/feature-graph/state?thread_id=<thread_id>
+ * GET /api/feature-graph/state?workspace_path=<workspace_path>
  *
  * Retrieves the feature graph state by loading from file via the backend.
+ * Uses workspace_path directly - no thread state access needed.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const { searchParams } = new URL(request.url);
-    const threadId = resolveThreadId(searchParams.get("thread_id"));
+    const workspacePath =
+      resolveWorkspacePath(searchParams.get("workspace_path")) ??
+      resolveWorkspacePath(searchParams.get("workspacePath"));
 
-    if (!threadId) {
+    if (!workspacePath) {
       return NextResponse.json(
-        { error: "thread_id query parameter is required" },
+        { error: "workspace_path query parameter is required" },
         { status: 400 },
       );
     }
 
-    const result = await loadFeatureGraphFromBackend(threadId);
+    const result = await loadFeatureGraphFromBackend(workspacePath);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -107,15 +110,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const data = result.data as {
       featureGraph?: unknown;
-      activeFeatureIds?: string[];
-      featureProposals?: unknown;
     } | null;
 
     return NextResponse.json({
-      thread_id: threadId,
+      workspace_path: workspacePath,
       feature_graph: data?.featureGraph ?? null,
-      active_feature_ids: data?.activeFeatureIds ?? [],
-      feature_proposals: data?.featureProposals ?? null,
     });
   } catch (error) {
     const message =
@@ -129,21 +128,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
  * POST /api/feature-graph/state
  *
  * Alternative POST endpoint for retrieving state (for clients that prefer POST).
+ * Uses workspace_path directly - no thread state access needed.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json();
-    const threadId =
-      resolveThreadId(body?.thread_id) ?? resolveThreadId(body?.threadId);
+    const workspacePath =
+      resolveWorkspacePath(body?.workspace_path) ??
+      resolveWorkspacePath(body?.workspacePath);
 
-    if (!threadId) {
+    if (!workspacePath) {
       return NextResponse.json(
-        { error: "thread_id is required" },
+        { error: "workspace_path is required" },
         { status: 400 },
       );
     }
 
-    const result = await loadFeatureGraphFromBackend(threadId);
+    const result = await loadFeatureGraphFromBackend(workspacePath);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -154,15 +155,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const data = result.data as {
       featureGraph?: unknown;
-      activeFeatureIds?: string[];
-      featureProposals?: unknown;
     } | null;
 
     return NextResponse.json({
-      thread_id: threadId,
+      workspace_path: workspacePath,
       feature_graph: data?.featureGraph ?? null,
-      active_feature_ids: data?.activeFeatureIds ?? [],
-      feature_proposals: data?.featureProposals ?? null,
     });
   } catch (error) {
     const message =
