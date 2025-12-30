@@ -374,84 +374,35 @@ export function registerFeatureGraphRoute(app: Hono) {
   });
 
   /**
-   * Load feature graph from file for a thread.
-   * This endpoint doesn't modify state, avoiding "thread busy" errors.
+   * Load feature graph from file using workspace_path directly.
+   * No thread state access needed - eliminates 409 "thread busy" errors.
    */
   app.post("/feature-graph/load", async (ctx) => {
-    const body = await ctx.req.json<{ thread_id?: unknown; threadId?: unknown }>().catch((error) => {
+    const body = await ctx.req.json<{
+      workspace_path?: unknown;
+      workspacePath?: unknown;
+    }>().catch((error) => {
       logger.error("Invalid JSON payload for feature graph load", {
         error: error instanceof Error ? error.message : String(error),
       });
       return null;
     });
 
-    const threadId = resolveThreadId(body as DevelopRequestBody | null);
+    const workspacePath = resolveWorkspacePath(body);
 
-    if (!threadId) {
+    if (!workspacePath) {
       return ctx.json(
-        { error: "thread_id is required" },
+        { error: "workspace_path is required" },
         400 as ContentfulStatusCode,
       );
     }
 
-    const client = createLangGraphClient({
-      defaultHeaders:
-        process.env.OPEN_SWE_LOCAL_MODE === "true"
-          ? { [LOCAL_MODE_HEADER]: "true" }
-          : undefined,
-    });
-
-    // Retry getState with exponential backoff if thread is busy
-    const maxRetries = 3;
-    let lastError: unknown = null;
-    let managerThreadState = null;
-
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        managerThreadState = await client.threads.getState<ManagerGraphState>(threadId);
-        break; // Success, exit retry loop
-      } catch (error) {
-        lastError = error;
-        const status = (error as { status?: number })?.status;
-
-        // Only retry on 409 (thread busy) errors
-        if (status === 409 && attempt < maxRetries - 1) {
-          const delay = Math.pow(2, attempt) * 500; // 500ms, 1000ms, 2000ms
-          logger.warn(`Thread busy, retrying getState in ${delay}ms`, {
-            threadId,
-            attempt: attempt + 1,
-            maxRetries,
-          });
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          continue;
-        }
-
-        // Non-retryable error or final attempt
-        logger.error("Failed to load manager state for feature graph load", {
-          error: error instanceof Error ? error.message : String(error),
-          status,
-        });
-        break;
-      }
-    }
-
-    if (!managerThreadState?.values) {
-      const status = (lastError as { status?: number })?.status ?? 404;
-      const message = status === 409
-        ? "Thread is busy, please try again later"
-        : "Manager state not found for thread";
-      return ctx.json(
-        { error: message },
-        status as ContentfulStatusCode,
-      );
-    }
-
-    const workspacePath = managerThreadState.values.workspacePath;
+    // Load feature graph directly from file - no thread state access needed
     const featureGraph = await loadFeatureGraphFromFile(workspacePath);
 
     if (!featureGraph) {
       return ctx.json(
-        { error: "Feature graph not available for thread. Please generate a feature graph first." },
+        { error: "Feature graph not found. Please generate a feature graph first." },
         404 as ContentfulStatusCode,
       );
     }
@@ -465,8 +416,6 @@ export function registerFeatureGraphRoute(app: Hono) {
         edges: serialized.edges,
         artifacts: serialized.artifacts,
       },
-      activeFeatureIds: managerThreadState.values.activeFeatureIds ?? [],
-      featureProposals: managerThreadState.values.featureProposals ?? null,
     });
   });
 
@@ -678,6 +627,16 @@ function resolveThreadId(
   body: DevelopRequestBody | ProposalActionRequestBody | null,
 ): string | null {
   const candidate = body?.thread_id ?? body?.threadId;
+  if (typeof candidate === "string" && candidate.trim()) {
+    return candidate.trim();
+  }
+  return null;
+}
+
+function resolveWorkspacePath(
+  body: { workspace_path?: unknown; workspacePath?: unknown } | null,
+): string | null {
+  const candidate = body?.workspace_path ?? body?.workspacePath;
   if (typeof candidate === "string" && candidate.trim()) {
     return candidate.trim();
   }
