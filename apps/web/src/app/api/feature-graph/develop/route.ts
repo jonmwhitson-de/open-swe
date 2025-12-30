@@ -26,7 +26,7 @@ import { coerceFeatureGraph } from "@/lib/coerce-feature-graph";
  * This loads from file instead of state to avoid state serialization issues.
  */
 async function loadFeatureGraphFromBackend(
-  threadId: string,
+  workspacePath: string,
 ): Promise<{ graph: FeatureGraph | null; error?: string }> {
   const backendUrl =
     process.env.LANGGRAPH_API_URL ??
@@ -45,7 +45,7 @@ async function loadFeatureGraphFromBackend(
     const response = await fetch(`${backendUrl}/feature-graph/load`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ thread_id: threadId }),
+      body: JSON.stringify({ workspace_path: workspacePath }),
     });
 
     if (!response.ok) {
@@ -212,9 +212,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const managerState = managerThreadState.values;
 
+    // workspacePath is required to load feature graph from file
+    if (!managerState.workspacePath) {
+      return NextResponse.json(
+        { error: "Workspace path not available. Please ensure the workspace is resolved." },
+        { status: 400 },
+      );
+    }
+
     // Load feature graph from backend (file-based) instead of state
     // to avoid state serialization issues
-    const { graph: featureGraph, error: graphError } = await loadFeatureGraphFromBackend(threadId);
+    const { graph: featureGraph, error: graphError } = await loadFeatureGraphFromBackend(managerState.workspacePath);
     if (!featureGraph) {
       return NextResponse.json(
         { error: graphError ?? "Feature graph not available for thread. Generate a feature graph first." },
