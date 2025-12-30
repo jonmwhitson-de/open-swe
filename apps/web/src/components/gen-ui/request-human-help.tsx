@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   HelpCircle,
   Loader2,
@@ -49,6 +49,13 @@ export function RequestHumanHelp({
   const finalResponse = eventResponse || submittedResponse;
   const isResponded = hasEventResponse || hasSubmitted;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Reset state when a new help request comes in
+  useEffect(() => {
+    setUserResponse("");
+    setSubmittedResponse(null);
+    setHasSubmitted(false);
+  }, [helpRequest]);
 
   const getStatusBadge = () => {
     if (isResponded) {

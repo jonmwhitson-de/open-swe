@@ -388,13 +388,13 @@ export function createGetURLContentToolFields() {
     url: z
       .string()
       .describe(
-        "The URL to get the content of. Returns the page content in markdown format.",
+        "The remote HTTP/HTTPS URL to get the content of. Returns the page content in markdown format. Do NOT use this for local files - use the shell or view tool instead.",
       ),
   });
 
   return {
     name: "get_url_content",
-    description: "Get the full page content of a given URL in markdown format.",
+    description: "Get the full page content of a remote HTTP/HTTPS URL in markdown format. Only use this for web URLs (http:// or https://). For local files and documents in the repository, use the shell or view tool instead.",
     schema: getURLContentSchema,
   };
 }
@@ -432,7 +432,7 @@ export function createSearchDocumentForToolFields() {
     url: z
       .string()
       .describe(
-        "The URL of the document to search within. This should be a URL that was previously fetched and processed.",
+        "The remote HTTP/HTTPS URL of the document to search within. This should be a web URL that was previously fetched and processed. Do NOT use this for local files - use grep or the shell to search local files.",
       ),
     query: z
       .string()
@@ -444,8 +444,9 @@ export function createSearchDocumentForToolFields() {
   return {
     name: "search_document_for",
     description:
-      "Search for specific information within a previously fetched document using natural language queries. This tool is particularly useful when working with large documents that have been summarized with a table of contents. " +
-      "This tool should only be called after a documentation or a web page has been read and summarized as a table of contents and you need to search for specific information within the document.",
+      "Search for specific information within a previously fetched web document using natural language queries. Only use this for remote HTTP/HTTPS URLs. " +
+      "This tool should only be called after a web page has been read and summarized as a table of contents and you need to search for specific information within the document. " +
+      "For local files in the repository, use grep or the shell tool instead.",
     schema: searchDocumentForSchema,
   };
 }
