@@ -550,17 +550,23 @@ export function ThreadView({
   const plannerProgrammerThreadId =
     plannerStream.values.programmerSession?.threadId;
 
-  const buildTaskPlanSignature = (taskPlan?: TaskPlan) =>
-    taskPlan
-      ? `${taskPlan.activeTaskIndex}:${taskPlan.tasks
-          .map(
-            (task) =>
-              `${task.id}:${task.taskIndex}:${task.completed}:${
-                task.completedAt ?? ""
-              }`,
-          )
-          .join("|")}`
-      : undefined;
+  const buildTaskPlanSignature = (taskPlan?: TaskPlan) => {
+    if (!taskPlan) return undefined;
+
+    // Include individual plan item completion status in signature
+    const taskSignatures = taskPlan.tasks.map((task) => {
+      const activeRevision = task.planRevisions?.[task.activeRevisionIndex];
+      const planItemSignature = activeRevision?.plans
+        ?.map((item) => `${item.index}:${item.completed}`)
+        .join(",") ?? "";
+
+      return `${task.id}:${task.taskIndex}:${task.completed}:${
+        task.completedAt ?? ""
+      }:[${planItemSignature}]`;
+    });
+
+    return `${taskPlan.activeTaskIndex}:${taskSignatures.join("|")}`;
+  };
 
   const programmerTaskPlanSignature = buildTaskPlanSignature(
     programmerStream.values?.taskPlan,
