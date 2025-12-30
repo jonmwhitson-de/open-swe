@@ -159,13 +159,15 @@ export async function classifyMessage(
     requestSource === "open-swe" || requestSource === "local-user";
   // Match common feature graph modification intents:
   // - propose/proposal/approve/reject for proposal workflow
-  // - add/create/remove/delete/modify/update for direct modifications
-  const graphEditIntent = /\b(propos(e|al)|approve|reject|add|create|remove|delete|modify|update)\s+(a\s+)?(new\s+)?feature/i.test(
+  // - add/create/remove/delete/modify/update for direct feature modifications
+  // The regex allows some words between verb and "feature" for natural language
+  const graphEditIntent = /\b(propos(e|al)|approve|reject|add|create|remove|delete|modify|update)\b.{0,30}\bfeature/i.test(
     userMessageContent,
   ) || /\b(propos(e|al)|approve|reject)\b/i.test(userMessageContent);
 
   if (isChatSession && graphEditIntent) {
     // Route to feature-graph-agent for direct graph modifications
+    // The agent needs the user message in state to process it
     return new Command({
       goto: "feature-graph-agent",
     });
