@@ -226,8 +226,8 @@ export function TerminalInput({
         }
 
         push(`/chat/${newThreadId}`);
-        if (trimmedMessage) {
-          void generateFeatureGraph(newThreadId, trimmedMessage);
+        if (trimmedMessage && workspaceAbsPath) {
+          void generateFeatureGraph(workspaceAbsPath, trimmedMessage);
         }
         clearCurrentDraft();
         setMessage("");

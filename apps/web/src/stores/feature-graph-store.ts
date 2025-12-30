@@ -87,7 +87,7 @@ interface FeatureGraphStoreState {
     threadId: string,
     options?: { force?: boolean },
   ) => Promise<void>;
-  generateGraph: (threadId: string, prompt: string) => Promise<void>;
+  generateGraph: (workspacePath: string, prompt: string) => Promise<void>;
   requestGraphGeneration: (threadId: string) => Promise<void>;
   startFeatureDevelopment: (featureId: string) => Promise<void>;
   /**
@@ -216,13 +216,13 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
       set({ threadId });
       // Cannot fetch without workspace path - this is a no-op now
     },
-    async generateGraph(threadId, prompt) {
+    async generateGraph(workspacePath, prompt) {
       const { isGeneratingGraph } = get();
-      if (!threadId || isGeneratingGraph) return;
+      if (!workspacePath || isGeneratingGraph) return;
 
       set((state) => ({
         ...state,
-        threadId,
+        workspacePath,
         isGeneratingGraph: true,
         isLoading: true,
         error: null,
@@ -234,7 +234,7 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ thread_id: threadId, prompt }),
+          body: JSON.stringify({ workspace_path: workspacePath, prompt }),
         });
 
         if (!response.ok) {
@@ -256,7 +256,7 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
 
         set((state) =>
           mapFetchResultToState(
-            { ...state, threadId, isGeneratingGraph: false },
+            { ...state, workspacePath, isGeneratingGraph: false },
             result,
           ),
         );
@@ -267,7 +267,7 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
             : "Failed to generate feature graph";
         set((state) => ({
           ...state,
-          threadId,
+          workspacePath,
           isGeneratingGraph: false,
           isLoading: false,
           error: message,
