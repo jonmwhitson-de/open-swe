@@ -207,6 +207,11 @@ export function TerminalInput({
         // set session storage so the stream can be resumed after redirect.
         sessionStorage.setItem(`lg:stream:${newThreadId}`, run.run_id);
 
+        // Store workspace path for fallback if thread state fails to load
+        if (workspaceAbsPath) {
+          sessionStorage.setItem(`lg:workspace-path:${newThreadId}`, workspaceAbsPath);
+        }
+
         // Store the initial message for optimistic rendering
         try {
           const initialMessageData = {
