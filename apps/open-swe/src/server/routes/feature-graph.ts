@@ -407,14 +407,16 @@ export function registerFeatureGraphRoute(app: Hono) {
       );
     }
 
-    const serialized = featureGraph.toJSON();
+    // Return nodes as array of objects with id property for consistency with generate endpoint
+    // This matches the FeatureGraphFile format expected by the frontend
+    const nodes = featureGraph.listFeatures();
 
     return ctx.json({
       featureGraph: {
-        version: serialized.version,
-        nodes: serialized.nodes,
-        edges: serialized.edges,
-        artifacts: serialized.artifacts,
+        version: featureGraph.version,
+        nodes,
+        edges: featureGraph.listEdges(),
+        artifacts: featureGraph.getArtifacts(),
       },
     });
   });

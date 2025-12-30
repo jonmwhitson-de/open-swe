@@ -185,12 +185,31 @@ function coerceGeneratedNodes(
 
   const map = new Map<string, FeatureNode>();
   for (const candidate of value) {
-    if (!candidate || typeof candidate !== "object") continue;
-    const node = candidate as Record<string, unknown>;
-    const id = node.id;
-    const name = node.name;
-    const description = node.description;
-    const status = node.status;
+    if (!candidate) continue;
+
+    // Handle both formats:
+    // 1. Tuple format from toJSON(): [id, nodeObject]
+    // 2. Object format with id property: { id, name, description, ... }
+    let id: unknown;
+    let nodeData: Record<string, unknown>;
+
+    if (Array.isArray(candidate) && candidate.length === 2) {
+      // Tuple format: [id, nodeObject]
+      id = candidate[0];
+      nodeData = typeof candidate[1] === "object" && candidate[1] !== null
+        ? candidate[1] as Record<string, unknown>
+        : {};
+    } else if (typeof candidate === "object") {
+      // Object format with id property
+      nodeData = candidate as Record<string, unknown>;
+      id = nodeData.id;
+    } else {
+      continue;
+    }
+
+    const name = nodeData.name;
+    const description = nodeData.description;
+    const status = nodeData.status;
 
     if (
       typeof id !== "string" ||
@@ -202,17 +221,17 @@ function coerceGeneratedNodes(
     }
 
     let normalizedMetadata: Record<string, unknown> | undefined = isPlainObject(
-      node.metadata,
+      nodeData.metadata,
     )
-      ? { ...node.metadata }
+      ? { ...nodeData.metadata }
       : undefined;
 
-    if (typeof node.development_progress === "number") {
+    if (typeof nodeData.development_progress === "number") {
       if (normalizedMetadata) {
-        normalizedMetadata.development_progress = node.development_progress;
+        normalizedMetadata.development_progress = nodeData.development_progress;
       } else {
         normalizedMetadata = {
-          development_progress: node.development_progress,
+          development_progress: nodeData.development_progress,
         };
       }
     }
@@ -224,16 +243,16 @@ function coerceGeneratedNodes(
       status,
     };
 
-    if (typeof node.group === "string") {
-      normalizedNode.group = node.group;
+    if (typeof nodeData.group === "string") {
+      normalizedNode.group = nodeData.group;
     }
 
     if (normalizedMetadata) {
       normalizedNode.metadata = normalizedMetadata;
     }
 
-    if (node.artifacts) {
-      normalizedNode.artifacts = node.artifacts as ArtifactCollection;
+    if (nodeData.artifacts) {
+      normalizedNode.artifacts = nodeData.artifacts as ArtifactCollection;
     }
 
     map.set(normalizedNode.id, normalizedNode);
