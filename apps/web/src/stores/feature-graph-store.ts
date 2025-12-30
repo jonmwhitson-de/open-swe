@@ -115,6 +115,8 @@ interface FeatureGraphStoreState {
   selectFeature: (featureId: string | null) => void;
   setActiveFeatureIds: (featureIds?: string[] | null) => void;
   setDesignThreadId: (designThreadId: string | null) => void;
+  /** Set the manager thread ID for operations that require it */
+  setThreadId: (threadId: string | null) => void;
   clear: () => void;
 }
 
@@ -131,6 +133,7 @@ const INITIAL_STATE: Omit<
     | "selectFeature"
     | "setActiveFeatureIds"
     | "setDesignThreadId"
+    | "setThreadId"
     | "clear"
   > = {
   threadId: null,
@@ -519,6 +522,9 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
     },
     setDesignThreadId(designThreadId) {
       set({ designThreadId });
+    },
+    setThreadId(threadId) {
+      set({ threadId });
     },
     async startDesignDevelopment(featureIds, designThreadId) {
       if (!featureIds.length || !designThreadId) {

@@ -310,6 +310,9 @@ export function ThreadView({
     (state) => state.setActiveFeatureIds,
   );
   const clearFeatureGraph = useFeatureGraphStore((state) => state.clear);
+  const setFeatureGraphThreadId = useFeatureGraphStore(
+    (state) => state.setThreadId,
+  );
 
   // Get workspace path from stream values for loading feature graph
   // Fall back to sessionStorage or repository lookup if stream.values doesn't have it
@@ -347,6 +350,18 @@ export function ThreadView({
   useEffect(() => {
     clearFeatureGraphRef.current = clearFeatureGraph;
   }, [clearFeatureGraph]);
+
+  // Set the threadId in the feature graph store so operations like
+  // startFeatureDevelopment can use it
+  useEffect(() => {
+    if (displayThread.id) {
+      setFeatureGraphThreadId(displayThread.id);
+    }
+
+    return () => {
+      setFeatureGraphThreadId(null);
+    };
+  }, [displayThread.id, setFeatureGraphThreadId]);
 
   // Fetch feature graph using workspace path directly - no thread state access needed
   // This eliminates 409 "thread busy" errors when loading the graph
