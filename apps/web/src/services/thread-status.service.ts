@@ -452,11 +452,11 @@ async function performFullStatusCheck(
   );
 
   // Always fetch fresh data when programmer is running to get latest task completion status
-  const shouldUseCachedData = cachedProgrammerData?.programmerData &&
-    cachedProgrammerData.programmerData.thread.status !== "busy";
+  const cachedThread = cachedProgrammerData?.programmerData?.thread;
+  const shouldUseCachedData = cachedThread && cachedThread.status !== "busy";
 
   if (shouldUseCachedData) {
-    programmerThread = cachedProgrammerData.programmerData.thread;
+    programmerThread = cachedThread;
   } else {
     programmerThread = await client.threads.get<GraphState>(
       programmerSession.threadId,
