@@ -709,7 +709,8 @@ function FeatureDevelopmentPanel({
   const isCompleted = status === "completed" ||
     feature.status?.toLowerCase() === "completed" ||
     feature.status?.toLowerCase() === "complete";
-  const isDisabled = isRunning || isBlocked || isCompleted;
+  // Only disable when running or blocked, allow re-development of completed features
+  const isDisabled = isRunning || isBlocked;
 
   return (
     <div className="border-border/70 bg-muted/20 rounded-md border p-3">
@@ -722,7 +723,7 @@ function FeatureDevelopmentPanel({
             </span>
             <span className="text-muted-foreground text-xs">
               {isCompleted
-                ? "This feature has been completed."
+                ? "This feature was completed. You can re-develop if needed."
                 : "Launch a dedicated planner run to work on this feature."}
             </span>
           </div>
@@ -731,7 +732,7 @@ function FeatureDevelopmentPanel({
           size="sm"
           onClick={onStart}
           disabled={isDisabled}
-          variant={isCompleted ? "secondary" : status === "error" ? "destructive" : "default"}
+          variant={status === "error" ? "destructive" : "default"}
         >
           {isRunning ? (
             <span className="flex items-center gap-2">
@@ -739,10 +740,7 @@ function FeatureDevelopmentPanel({
               {status === "starting" ? "Starting" : "Running"}
             </span>
           ) : isCompleted ? (
-            <span className="flex items-center gap-2">
-              <CheckCircle2 className="size-4" />
-              Completed
-            </span>
+            "Re-develop"
           ) : (
             "Start development"
           )}
@@ -751,7 +749,13 @@ function FeatureDevelopmentPanel({
 
       <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-2 text-xs">
         <span className="text-foreground font-semibold">{feature.name}</span>
-        <FeatureRunStatusPill status={status} />
+        {isCompleted && (
+          <Badge variant="outline" className="text-emerald-600 border-emerald-300 bg-emerald-50 dark:text-emerald-400 dark:border-emerald-700 dark:bg-emerald-950">
+            <CheckCircle2 className="size-3 mr-1" />
+            Completed
+          </Badge>
+        )}
+        <FeatureRunStatusPill status={isCompleted ? "idle" : status} />
         {runState?.runId && (
           <span className="bg-background rounded px-2 py-1 font-mono text-[11px]">
             {runState.runId}
