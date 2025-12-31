@@ -23,6 +23,7 @@ import {
   createGetURLContentTool,
   createSearchDocumentForTool,
   createWriteDefaultTsConfigTool,
+  createScratchpadTool,
 } from "../../../../tools/index.js";
 import { formatPlanPrompt } from "../../../../utils/plan-prompt.js";
 import { stopSandbox } from "../../../../utils/sandbox.js";
@@ -216,6 +217,7 @@ async function createToolsAndPrompt(
     createMarkTaskCompletedToolFields(),
     createSearchDocumentForTool(state, config),
     createWriteDefaultTsConfigTool(state, config),
+    createScratchpadTool("to save technical notes, observations, or reminders during programming"),
     ...mcpTools,
   ];
 

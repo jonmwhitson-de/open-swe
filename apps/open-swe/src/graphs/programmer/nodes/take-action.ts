@@ -8,6 +8,7 @@ import {
   createShellTool,
   createSearchDocumentForTool,
   createWriteDefaultTsConfigTool,
+  createScratchpadTool,
 } from "../../../tools/index.js";
 import {
   GraphState,
@@ -60,6 +61,9 @@ export async function takeAction(
     state,
     config,
   );
+  const scratchpadTool = createScratchpadTool(
+    "to save technical notes, observations, or reminders during programming",
+  );
 
   const higherContextLimitToolNames = [
     ...mcpTools.map((t) => t.name),
@@ -77,6 +81,7 @@ export async function takeAction(
     getURLContentTool,
     searchDocumentForTool,
     writeDefaultTsConfigTool,
+    scratchpadTool,
     ...mcpTools,
   ];
   const toolsMap = Object.fromEntries(
