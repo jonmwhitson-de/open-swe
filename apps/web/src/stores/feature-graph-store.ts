@@ -470,14 +470,8 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
       set((state) => {
         const current = state.featureRuns[featureId];
 
-        // Remove from activeFeatureIds if completed
-        const activeFeatureIds = status === "completed"
-          ? state.activeFeatureIds.filter((id) => id !== featureId)
-          : state.activeFeatureIds;
-
         return {
           ...state,
-          activeFeatureIds,
           featureRuns: {
             ...state.featureRuns,
             [featureId]: {
