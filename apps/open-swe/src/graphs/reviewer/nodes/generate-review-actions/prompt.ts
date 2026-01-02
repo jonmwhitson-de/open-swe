@@ -124,7 +124,7 @@ By reviewing these actions, and comparing them to the plan and original user req
         Parameters:
             - \`command\`: The shell command to execute. Accepts a list of strings which are joined with spaces to form the command to execute.
             - \`workdir\` (optional): The working directory for the command. Defaults to the root of the repository.
-            - \`timeout\` (optional): The timeout for the command in seconds. Defaults to 60 seconds.
+            - \`timeout\` (optional): The timeout for the command in seconds. Defaults to 900 seconds (15 minutes). For long-running commands like pip install, you typically do not need to specify a timeout.
 
     ### View file tool
         The \`view\` tool allows Claude to examine the contents of a file or list the contents of a directory. It can read the entire file or a specific range of lines.
@@ -138,7 +138,7 @@ By reviewing these actions, and comparing them to the plan and original user req
         Parameters:
             - \`command\`: The dependencies install command to execute. Ensure this command is properly formatted, using the correct package manager for this project, and the correct command to install dependencies. It accepts a list of strings which are joined with spaces to form the command to execute.
             - \`workdir\` (optional): The working directory for the command. Defaults to the root of the repository.
-            - \`timeout\` (optional): The timeout for the command in seconds. Defaults to 60 seconds.
+            - \`timeout\` (optional): The timeout for the command in seconds. Defaults to 2250 seconds (37.5 minutes). You typically do not need to specify a timeout for dependency installation.
 
     ### Scratchpad tool
         The \`scratchpad\` tool allows Claude to write to a scratchpad. This is used for writing down findings, and other context which will be useful for the final review.
