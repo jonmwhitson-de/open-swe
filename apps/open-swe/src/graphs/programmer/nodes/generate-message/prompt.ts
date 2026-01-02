@@ -154,7 +154,7 @@ ${CORE_BEHAVIOR_PROMPT}
             Parameters:
                 - \`command\`: The shell command to execute. Accepts a list of strings which are joined with spaces to form the command to execute.
                 - \`workdir\` (optional): The working directory for the command. Defaults to the root of the repository.
-                - \`timeout\` (optional): The timeout for the command in seconds. Defaults to 60 seconds.
+                - \`timeout\` (optional): The timeout for the command in seconds. Defaults to 900 seconds (15 minutes). For long-running commands like pip install, you typically do not need to specify a timeout.
         
         ### Request human help tool
             The \`request_human_help\` tool allows Claude to request human help if all possible tools/actions have been exhausted, and Claude is unable to complete the task.
@@ -182,7 +182,7 @@ ${CORE_BEHAVIOR_PROMPT}
             Parameters:
                 - \`command\`: The dependencies install command to execute. Ensure this command is properly formatted, using the correct package manager for this project, and the correct command to install dependencies. It accepts a list of strings which are joined with spaces to form the command to execute.
                 - \`workdir\` (optional): The working directory for the command. Defaults to the root of the repository.
-                - \`timeout\` (optional): The timeout for the command in seconds. Defaults to 60 seconds.
+                - \`timeout\` (optional): The timeout for the command in seconds. Defaults to 2250 seconds (37.5 minutes). You typically do not need to specify a timeout for dependency installation.
 
         ### Mark task completed tool
             The \`mark_task_completed\` tool allows Claude to mark a task as completed.

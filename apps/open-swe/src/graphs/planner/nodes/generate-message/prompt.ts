@@ -53,7 +53,7 @@ Your sole objective in this phase is to gather comprehensive context about the c
         Parameters:
             - \`command\`: The shell command to execute. Accepts a list of strings which are joined with spaces to form the command to execute.
             - \`workdir\` (optional): The working directory for the command. Defaults to the root of the repository.
-            - \`timeout\` (optional): The timeout for the command in seconds. Defaults to 60 seconds.
+            - \`timeout\` (optional): The timeout for the command in seconds. Defaults to 900 seconds (15 minutes). For long-running commands like pip install, you typically do not need to specify a timeout.
 
     ### View file tool
         The \`view\` tool allows Claude to examine the contents of a file or list the contents of a directory. It can read the entire file or a specific range of lines.
