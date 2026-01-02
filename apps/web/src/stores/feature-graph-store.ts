@@ -117,6 +117,10 @@ interface FeatureGraphStoreState {
    * Updates the feature status to "completed" and removes from activeFeatureIds.
    */
   completeFeature: (featureId: string) => Promise<void>;
+  /**
+   * Delete a feature from the graph.
+   */
+  deleteFeature: (featureId: string) => Promise<void>;
   selectFeature: (featureId: string | null) => void;
   setActiveFeatureIds: (featureIds?: string[] | null) => void;
   setDesignThreadId: (designThreadId: string | null) => void;
@@ -136,6 +140,7 @@ const INITIAL_STATE: Omit<
     | "respondToProposal"
     | "setFeatureRunStatus"
     | "completeFeature"
+    | "deleteFeature"
     | "selectFeature"
     | "setActiveFeatureIds"
     | "setDesignThreadId"
@@ -536,6 +541,54 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
         });
       } catch (error) {
         console.error("Failed to complete feature:", error);
+        throw error;
+      }
+    },
+    async deleteFeature(featureId) {
+      const { workspacePath, featuresById } = get();
+
+      if (!workspacePath || !featureId || !featuresById[featureId]) {
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/feature-graph/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspace_path: workspacePath,
+            feature_id: featureId,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error ?? "Failed to delete feature");
+        }
+
+        // Remove feature from local state
+        set((state) => {
+          const { [featureId]: _removed, ...remainingFeaturesById } = state.featuresById;
+          const updatedFeatures = state.features.filter((f) => f.id !== featureId);
+          const updatedActiveFeatureIds = state.activeFeatureIds.filter((id) => id !== featureId);
+          const { [featureId]: _removedRun, ...remainingFeatureRuns } = state.featureRuns;
+
+          // Clear selection if deleted feature was selected
+          const selectedFeatureId = state.selectedFeatureId === featureId
+            ? (updatedFeatures[0]?.id ?? null)
+            : state.selectedFeatureId;
+
+          return {
+            ...state,
+            features: updatedFeatures,
+            featuresById: remainingFeaturesById,
+            activeFeatureIds: updatedActiveFeatureIds,
+            featureRuns: remainingFeatureRuns,
+            selectedFeatureId,
+          };
+        });
+      } catch (error) {
+        console.error("Failed to delete feature:", error);
         throw error;
       }
     },

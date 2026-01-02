@@ -688,6 +688,84 @@ export function registerFeatureGraphRoute(app: Hono) {
       featureGraph: updatedGraph.toJSON(),
     });
   });
+
+  /**
+   * Delete a feature from the graph.
+   */
+  app.post("/feature-graph/delete", async (ctx) => {
+    let body: { workspace_path?: unknown; feature_id?: unknown } | null = null;
+
+    try {
+      body = await ctx.req.json();
+    } catch {
+      return ctx.json(
+        { error: "Invalid JSON payload" },
+        400 as ContentfulStatusCode,
+      );
+    }
+
+    const workspacePath = resolveWorkspacePath(body);
+    const featureId = typeof body?.feature_id === "string" ? body.feature_id.trim() : null;
+
+    if (!workspacePath) {
+      return ctx.json(
+        { error: "workspace_path is required" },
+        400 as ContentfulStatusCode,
+      );
+    }
+
+    if (!featureId) {
+      return ctx.json(
+        { error: "feature_id is required" },
+        400 as ContentfulStatusCode,
+      );
+    }
+
+    // Load feature graph from file
+    const featureGraph = await loadFeatureGraphFromFile(workspacePath);
+    if (!featureGraph) {
+      return ctx.json(
+        { error: "Feature graph not found" },
+        404 as ContentfulStatusCode,
+      );
+    }
+
+    // Check if feature exists
+    const feature = featureGraph.getFeature(featureId);
+    if (!feature) {
+      return ctx.json(
+        { error: `Feature "${featureId}" not found in graph` },
+        404 as ContentfulStatusCode,
+      );
+    }
+
+    // Remove the feature from the graph
+    const serialized = featureGraph.toJSON();
+    const nodes = new Map(serialized.nodes);
+    nodes.delete(featureId);
+
+    // Also remove any edges connected to this feature
+    const edges = serialized.edges.filter(
+      (edge) => edge.source !== featureId && edge.target !== featureId,
+    );
+
+    const updatedGraph = new FeatureGraph({
+      version: serialized.version,
+      nodes,
+      edges,
+      artifacts: serialized.artifacts,
+    });
+
+    await persistFeatureGraph(updatedGraph, workspacePath);
+
+    logger.info("Deleted feature from graph", { featureId, workspacePath });
+
+    return ctx.json({
+      success: true,
+      featureId,
+      featureGraph: updatedGraph.toJSON(),
+    });
+  });
 }
 
 function resolveThreadId(

@@ -14,6 +14,7 @@ import {
   Network,
   ThumbsDown,
   ThumbsUp,
+  Trash2,
   XCircle,
 } from "lucide-react";
 
@@ -86,6 +87,7 @@ export function FeatureInsightsPanel({
     fetchGraphForWorkspace,
     generateGraph,
     startFeatureDevelopment,
+    deleteFeature,
     selectFeature,
     respondToProposal,
   } = useFeatureGraphStore(
@@ -109,6 +111,7 @@ export function FeatureInsightsPanel({
       fetchGraphForWorkspace: state.fetchGraphForWorkspace,
       generateGraph: state.generateGraph,
       startFeatureDevelopment: state.startFeatureDevelopment,
+      deleteFeature: state.deleteFeature,
       selectFeature: state.selectFeature,
       respondToProposal: state.respondToProposal,
     })),
@@ -230,6 +233,18 @@ export function FeatureInsightsPanel({
     });
   }, [onStartPlanner, selectedFeature, startFeatureDevelopment]);
 
+  const handleDeleteFeature = useCallback(() => {
+    if (!selectedFeature) return;
+
+    void deleteFeature(selectedFeature.id).catch((error) => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to delete feature";
+      toast.error(message);
+    });
+  }, [selectedFeature, deleteFeature]);
+
   const hasData =
     features.length > 0 ||
     activeFeatures.length > 0 ||
@@ -308,6 +323,7 @@ export function FeatureInsightsPanel({
                 feature={selectedFeature}
                 runState={selectedRunState}
                 onStart={handleStartDevelopment}
+                onDelete={handleDeleteFeature}
               />
             )}
 
@@ -698,10 +714,12 @@ function FeatureDevelopmentPanel({
   feature,
   runState,
   onStart,
+  onDelete,
 }: {
   feature: FeatureNode;
   runState: FeatureRunState | undefined;
   onStart: () => void;
+  onDelete: () => void;
 }) {
   const status = runState?.status ?? "idle";
   const isRunning = status === "running" || status === "starting";
@@ -728,23 +746,34 @@ function FeatureDevelopmentPanel({
             </span>
           </div>
         </div>
-        <Button
-          size="sm"
-          onClick={onStart}
-          disabled={isDisabled}
-          variant={status === "error" ? "destructive" : "default"}
-        >
-          {isRunning ? (
-            <span className="flex items-center gap-2">
-              <Loader2 className="size-4 animate-spin" />
-              {status === "starting" ? "Starting" : "Running"}
-            </span>
-          ) : isCompleted ? (
-            "Re-develop"
-          ) : (
-            "Start development"
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={onStart}
+            disabled={isDisabled}
+            variant={status === "error" ? "destructive" : "default"}
+          >
+            {isRunning ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" />
+                {status === "starting" ? "Starting" : "Running"}
+              </span>
+            ) : isCompleted ? (
+              "Re-develop"
+            ) : (
+              "Start development"
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onDelete}
+            disabled={isRunning}
+            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
       </div>
 
       <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-2 text-xs">

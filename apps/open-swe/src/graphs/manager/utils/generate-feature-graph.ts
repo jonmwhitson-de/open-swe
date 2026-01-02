@@ -30,7 +30,7 @@ Each graph follows this JSON schema:
       "id": "unique-id",
       "name": "Short title",
       "description": "Concise description of the feature or capability",
-      "status": "current status such as proposed/active/deprecated",
+      "status": "proposed",
       "development_progress": "To Do | In Progress | Completed",
       "group": "Optional area or domain label",
       "artifacts": ["Optional paths to relevant files or docs"]
@@ -48,13 +48,14 @@ Each graph follows this JSON schema:
 
 Rules:
 - Always include a development_progress field on every node using one of: To Do, In Progress, Completed.
-- Prefer 5-12 feature nodes that reflect the repository's actual functionality.
+- Generate only 1-3 core features initially. Users will add more features as needed through conversation.
+- ALL features must have status "proposed" - users must approve each feature before development.
 - Keep names short and descriptions focused on user-visible outcomes.
 - Capture major dependencies between features using edges.
 - Use the provided repository tree (up to 7 layers) and README excerpt to ground each feature in the existing codebase.
 - When a user request is provided, treat it as the authoritative requirements and ensure every node aligns with it.
 - Each feature description must read like a mini design spec with explicit implementation guidance for planners/programmers.
-- If key questions remain unanswered, dedicate nodes to clarifying those unknowns so the chat agent can follow up.
+- Focus on the most essential, foundational features first. Additional features can be proposed later.
 - Only return JSON. Do not wrap the response in markdown fences.`;
 
 type WorkspaceContext = {
@@ -294,14 +295,13 @@ export async function generateFeatureGraphForWorkspace({
   });
 
   const graphData = await loadFeatureGraph(graphPath);
-  const activeFeatureIds = listFeaturesFromGraph(graphData, {
-    activeFeatureIds: graphData.nodes.keys(),
-  }).map((node) => node.id);
+  // Don't auto-activate features - they start as "proposed" and require user approval
+  const activeFeatureIds: string[] = [];
 
-  logger.info("Generated feature graph", {
+  logger.info("Generated feature graph with proposed features", {
     workspacePath,
     graphPath,
-    featureCount: activeFeatureIds.length,
+    proposedFeatureCount: graphData.nodes.size,
   });
 
   return { graphData, graphFile, activeFeatureIds };
