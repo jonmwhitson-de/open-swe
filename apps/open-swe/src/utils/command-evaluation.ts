@@ -1,8 +1,5 @@
 import { createLogger, LogLevel } from "./logger.js";
-import {
-  batchEvaluateCommandSafety,
-  createCommandSafetyEvaluator,
-} from "../tools/command-safety-evaluator.js";
+import { batchEvaluateCommandSafety } from "../tools/command-safety-evaluator.js";
 import { GraphConfig } from "@openswe/shared/open-swe/types";
 import {
   formatGrepCommand,
