@@ -362,8 +362,8 @@ export class LocalDockerSandboxProvider implements SandboxProvider {
 
     if (!effectiveTimeout) {
       const result = await execPromise;
-      // Sync filesystem after successful command execution
-      if (result.exitCode === 0 && !command.startsWith("sync") && !command.startsWith("cat ") && !command.startsWith("ls ") && !command.startsWith("stat ")) {
+      // Sync filesystem after successful command execution (skip for read-only and package manager commands)
+      if (result.exitCode === 0 && this.shouldSyncAfterCommand(command)) {
         await this.syncFilesystem(container, workingDir);
       }
       return result;
@@ -394,7 +394,7 @@ export class LocalDockerSandboxProvider implements SandboxProvider {
 
       // Sync filesystem after successful command execution to ensure
       // Docker bind mount consistency for subsequent reads
-      if (result.exitCode === 0 && !command.startsWith("sync") && !command.startsWith("cat ") && !command.startsWith("ls ") && !command.startsWith("stat ")) {
+      if (result.exitCode === 0 && this.shouldSyncAfterCommand(command)) {
         await this.syncFilesystem(container, workingDir);
       }
 
@@ -422,6 +422,59 @@ export class LocalDockerSandboxProvider implements SandboxProvider {
       return undefined;
     }
     return candidate;
+  }
+
+  /**
+   * Determine if we should sync the filesystem after a command.
+   * Skip sync for read-only commands and package manager installs (which write many files
+   * but don't need immediate read consistency for those files).
+   */
+  private shouldSyncAfterCommand(command: string): boolean {
+    const lowerCommand = command.toLowerCase();
+
+    // Skip sync for read-only commands
+    if (
+      command.startsWith("sync") ||
+      command.startsWith("cat ") ||
+      command.startsWith("ls ") ||
+      command.startsWith("stat ") ||
+      command.startsWith("head ") ||
+      command.startsWith("tail ") ||
+      command.startsWith("grep ") ||
+      command.startsWith("find ") ||
+      command.startsWith("which ") ||
+      command.startsWith("pwd") ||
+      command.startsWith("echo ") ||
+      command.startsWith("test ")
+    ) {
+      return false;
+    }
+
+    // Skip sync for package manager commands (they write many files but we don't
+    // need immediate read consistency for installed packages)
+    if (
+      lowerCommand.includes("pip install") ||
+      lowerCommand.includes("pip3 install") ||
+      lowerCommand.includes("npm install") ||
+      lowerCommand.includes("npm ci") ||
+      lowerCommand.includes("yarn install") ||
+      lowerCommand.includes("yarn add") ||
+      lowerCommand.includes("pnpm install") ||
+      lowerCommand.includes("pnpm add") ||
+      lowerCommand.includes("apt-get install") ||
+      lowerCommand.includes("apt install") ||
+      lowerCommand.includes("apk add") ||
+      lowerCommand.includes("conda install") ||
+      lowerCommand.includes("poetry install") ||
+      lowerCommand.includes("bundle install") ||
+      lowerCommand.includes("cargo install") ||
+      lowerCommand.includes("go get") ||
+      lowerCommand.includes("go install")
+    ) {
+      return false;
+    }
+
+    return true;
   }
 
   /**
