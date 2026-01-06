@@ -217,6 +217,9 @@ ${delimiter}`;
       sandbox: sandbox ?? undefined,
     });
 
+    // Additional delay to allow Docker bind mount to propagate changes
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
     return {
       success: true,
       output: `Successfully wrote file '${filePath}' to sandbox via cat.`,
