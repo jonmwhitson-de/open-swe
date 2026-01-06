@@ -364,18 +364,7 @@ export class LocalDockerSandboxProvider implements SandboxProvider {
       const result = await execPromise;
       // Sync filesystem after successful command execution
       if (result.exitCode === 0 && !command.startsWith("sync") && !command.startsWith("cat ") && !command.startsWith("ls ") && !command.startsWith("stat ")) {
-        try {
-          const syncExec = await container.exec({
-            Cmd: ["/bin/sh", "-c", "sync"],
-            WorkingDir: workingDir,
-            AttachStdout: false,
-            AttachStderr: false,
-            AttachStdin: false,
-          });
-          await syncExec.start({ hijack: false, stdin: false });
-        } catch {
-          // Ignore sync errors
-        }
+        await this.syncFilesystem(container, workingDir);
       }
       return result;
     }
@@ -406,18 +395,7 @@ export class LocalDockerSandboxProvider implements SandboxProvider {
       // Sync filesystem after successful command execution to ensure
       // Docker bind mount consistency for subsequent reads
       if (result.exitCode === 0 && !command.startsWith("sync") && !command.startsWith("cat ") && !command.startsWith("ls ") && !command.startsWith("stat ")) {
-        try {
-          const syncExec = await container.exec({
-            Cmd: ["/bin/sh", "-c", "sync"],
-            WorkingDir: workingDir,
-            AttachStdout: false,
-            AttachStderr: false,
-            AttachStdin: false,
-          });
-          await syncExec.start({ hijack: false, stdin: false });
-        } catch {
-          // Ignore sync errors - it's a best-effort optimization
-        }
+        await this.syncFilesystem(container, workingDir);
       }
 
       return result;
@@ -444,6 +422,38 @@ export class LocalDockerSandboxProvider implements SandboxProvider {
       return undefined;
     }
     return candidate;
+  }
+
+  /**
+   * Sync filesystem to ensure Docker bind mount consistency.
+   * This properly waits for the sync command to complete.
+   */
+  private async syncFilesystem(container: Container, workingDir: string): Promise<void> {
+    try {
+      const syncExec = await container.exec({
+        Cmd: ["/bin/sh", "-c", "sync"],
+        WorkingDir: workingDir,
+        AttachStdout: true,
+        AttachStderr: true,
+        AttachStdin: false,
+      });
+
+      const stream = await syncExec.start({ hijack: true, stdin: false });
+
+      // Wait for the sync command to complete
+      await new Promise<void>((resolve, reject) => {
+        stream.on("end", resolve);
+        stream.on("close", resolve);
+        stream.on("error", reject);
+        // Timeout after 5 seconds to prevent hanging
+        setTimeout(resolve, 5000);
+      });
+
+      // Small delay to allow bind mount to propagate
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    } catch {
+      // Ignore sync errors - it's a best-effort optimization
+    }
   }
 
   private async collectExecResult(exec: Docker.Exec): Promise<ExecResult> {
