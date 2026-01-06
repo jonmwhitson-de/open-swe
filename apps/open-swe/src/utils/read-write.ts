@@ -206,6 +206,17 @@ ${delimiter}`;
         output: `FAILED TO WRITE FILE to sandbox '${filePath}'. Exit code: ${writeOutput.exitCode}\nResult: ${errorResult}`,
       };
     }
+
+    // Sync filesystem to ensure changes are flushed to disk
+    // This is critical for Docker bind mounts where container writes may not
+    // be immediately visible to subsequent reads
+    await executor.executeCommand({
+      command: "sync",
+      workdir: workDir,
+      timeout: 10,
+      sandbox: sandbox ?? undefined,
+    });
+
     return {
       success: true,
       output: `Successfully wrote file '${filePath}' to sandbox via cat.`,
