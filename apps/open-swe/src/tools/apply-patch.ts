@@ -173,6 +173,9 @@ export function createApplyPatchTool(state: GraphState, config: GraphConfig) {
         ? null
         : await getSandboxSessionOrThrow(input);
 
+      // Create executor for shell commands
+      const executor = createShellExecutor(config);
+
       // Read the file using unified readFile function
       const readFileResult = await readFile({
         sandbox,
@@ -197,8 +200,24 @@ export function createApplyPatchTool(state: GraphState, config: GraphConfig) {
 
       const readFileOutput = readFileResult.output;
 
-      // If Git successfully applied the patch, read the updated file and return success
+      // If Git successfully applied the patch, verify the file exists and read it
       if (gitResult.success) {
+        // First, verify the file actually exists using stat (not readFile which auto-creates)
+        const statResult = await executor.executeCommand({
+          command: `test -f "${file_path}" && stat "${file_path}"`,
+          workdir: workDir,
+          timeout: 10,
+          sandbox: sandbox || undefined,
+        });
+
+        if (statResult.exitCode !== 0) {
+          throw new Error(
+            `Git apply reported success but file '${file_path}' does not exist. ` +
+            `This may indicate the patch file path doesn't match the target file. ` +
+            `Git output: ${gitResult.output}`,
+          );
+        }
+
         const readUpdatedResult = await readFile({
           sandbox,
           filePath: file_path,
@@ -209,6 +228,26 @@ export function createApplyPatchTool(state: GraphState, config: GraphConfig) {
         if (!readUpdatedResult.success) {
           throw new Error(
             `Failed to read updated file after applying patch: ${readUpdatedResult.output}`,
+          );
+        }
+
+        // Verify the content actually changed (unless it's a new file)
+        const originalWasEmpty = readFileOutput.trim() === "";
+        const updatedIsEmpty = readUpdatedResult.output.trim() === "";
+
+        if (!originalWasEmpty && readUpdatedResult.output === readFileOutput) {
+          throw new Error(
+            `Git apply reported success but file content is unchanged. ` +
+            `The patch may not have matched the file content. ` +
+            `Git output: ${gitResult.output}`,
+          );
+        }
+
+        if (originalWasEmpty && updatedIsEmpty) {
+          throw new Error(
+            `Git apply reported success but file '${file_path}' is empty. ` +
+            `The patch may not have been applied correctly. ` +
+            `Git output: ${gitResult.output}`,
           );
         }
 
