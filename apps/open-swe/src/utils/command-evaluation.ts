@@ -1,5 +1,8 @@
 import { createLogger, LogLevel } from "./logger.js";
-import { createCommandSafetyEvaluator } from "../tools/command-safety-evaluator.js";
+import {
+  batchEvaluateCommandSafety,
+  createCommandSafetyEvaluator,
+} from "../tools/command-safety-evaluator.js";
 import { GraphConfig } from "@openswe/shared/open-swe/types";
 import {
   formatGrepCommand,
@@ -158,46 +161,36 @@ export async function evaluateCommands(
     commandToolCalls: commandToolCalls.map((c) => c.name),
   });
 
-  // Create safety evaluator
-  const safetyEvaluator = createCommandSafetyEvaluator(config);
+  // Prepare commands for batch evaluation
+  const commandsToEvaluate = commandToolCalls.map((toolCall) => {
+    const { commandString } = getCommandString(toolCall);
+    return {
+      command: commandString,
+      tool_name: toolCall.name,
+      args: toolCall.args as Record<string, unknown>,
+    };
+  });
 
-  // Evaluate safety for each command
-  const safetyEvaluations = await Promise.all(
-    commandToolCalls.map(async (toolCall) => {
+  // Batch evaluate all commands in a single LLM call
+  const batchResults = await batchEvaluateCommandSafety(
+    commandsToEvaluate,
+    config,
+  );
+
+  // Map batch results back to CommandEvaluation format
+  const safetyEvaluations: CommandEvaluation[] = commandToolCalls.map(
+    (toolCall, index) => {
       const { commandString, commandDescription } = getCommandString(toolCall);
-
-      try {
-        const evaluation = await safetyEvaluator.invoke({
-          command: commandString,
-          tool_name: toolCall.name,
-          args: toolCall.args,
-        });
-
-        const result = evaluation.result;
-        return {
-          toolCall,
-          commandDescription,
-          commandString,
-          isSafe: result.is_safe,
-          reasoning: result.reasoning,
-          riskLevel: result.risk_level,
-        };
-      } catch (e) {
-        logger.error("Failed to evaluate safety for command", {
-          toolCall,
-          error: e instanceof Error ? e.message : e,
-        });
-        // Default to unsafe if evaluation fails
-        return {
-          toolCall,
-          commandDescription,
-          commandString,
-          isSafe: false,
-          reasoning: "Failed to evaluate safety - defaulting to unsafe",
-          riskLevel: "high" as const,
-        };
-      }
-    }),
+      const result = batchResults[index];
+      return {
+        toolCall,
+        commandDescription,
+        commandString,
+        isSafe: result.is_safe,
+        reasoning: result.reasoning,
+        riskLevel: result.risk_level,
+      };
+    },
   );
 
   // Categorize commands
