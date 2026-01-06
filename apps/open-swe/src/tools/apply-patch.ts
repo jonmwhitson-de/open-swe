@@ -109,6 +109,18 @@ async function applyPatchWithGit(
       sandbox: sandbox || undefined,
     });
 
+    // Force filesystem cache invalidation by statting the patched files
+    // This helps ensure Docker bind mount sees the updated content
+    await executor.executeCommand({
+      command: `stat "${tempPatchFile}" 2>/dev/null || true`,
+      workdir: workDir,
+      timeout: 5,
+      sandbox: sandbox || undefined,
+    });
+
+    // Additional delay to allow Docker bind mount to propagate changes
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
     return {
       success: true,
       output: response.result || "Patch applied successfully",

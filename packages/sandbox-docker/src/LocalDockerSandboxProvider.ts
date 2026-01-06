@@ -361,7 +361,23 @@ export class LocalDockerSandboxProvider implements SandboxProvider {
     const effectiveTimeout = this.resolveTimeout(timeoutSec);
 
     if (!effectiveTimeout) {
-      return execPromise;
+      const result = await execPromise;
+      // Sync filesystem after successful command execution
+      if (result.exitCode === 0 && !command.startsWith("sync") && !command.startsWith("cat ") && !command.startsWith("ls ") && !command.startsWith("stat ")) {
+        try {
+          const syncExec = await container.exec({
+            Cmd: ["/bin/sh", "-c", "sync"],
+            WorkingDir: workingDir,
+            AttachStdout: false,
+            AttachStderr: false,
+            AttachStdin: false,
+          });
+          await syncExec.start({ hijack: false, stdin: false });
+        } catch {
+          // Ignore sync errors
+        }
+      }
+      return result;
     }
 
     const timeoutMs = effectiveTimeout * 1000;
@@ -386,6 +402,24 @@ export class LocalDockerSandboxProvider implements SandboxProvider {
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);
       }
+
+      // Sync filesystem after successful command execution to ensure
+      // Docker bind mount consistency for subsequent reads
+      if (result.exitCode === 0 && !command.startsWith("sync") && !command.startsWith("cat ") && !command.startsWith("ls ") && !command.startsWith("stat ")) {
+        try {
+          const syncExec = await container.exec({
+            Cmd: ["/bin/sh", "-c", "sync"],
+            WorkingDir: workingDir,
+            AttachStdout: false,
+            AttachStderr: false,
+            AttachStdin: false,
+          });
+          await syncExec.start({ hijack: false, stdin: false });
+        } catch {
+          // Ignore sync errors - it's a best-effort optimization
+        }
+      }
+
       return result;
     } catch (error) {
       if (timeoutHandle) {
