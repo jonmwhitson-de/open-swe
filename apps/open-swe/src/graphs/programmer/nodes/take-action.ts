@@ -136,11 +136,14 @@ export async function takeAction(
     try {
       const toolResult: { result: string; status: "success" | "error" } =
         // @ts-expect-error tool.invoke types are weird here...
-        await tool.invoke({
-          ...toolCall.args,
-          // Only pass sandbox session ID in sandbox mode, not local mode
-          ...(isLocalMode(config) ? {} : { xSandboxSessionId: sandbox.id }),
-        });
+        await tool.invoke(
+          {
+            ...toolCall.args,
+            // Only pass sandbox session ID in sandbox mode, not local mode
+            ...(isLocalMode(config) ? {} : { xSandboxSessionId: sandbox.id }),
+          },
+          config,
+        );
       if (typeof toolResult === "string") {
         result = toolResult;
         toolCallStatus = "success";
