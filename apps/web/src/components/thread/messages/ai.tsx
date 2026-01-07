@@ -545,6 +545,7 @@ export function AssistantMessage({
     return (
       <div className="flex flex-col gap-4">
         <RequestHumanHelp
+          key={requestHumanHelpToolCall.id}
           status={correspondingToolResult ? "done" : "generating"}
           helpRequest={args.help_request}
           reasoningText={reasoningText}
