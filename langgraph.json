@@ -1,5 +1,6 @@
 {
   "node_version": "20",
+  "store": {},
   "graphs": {
     "programmer": "./apps/open-swe/src/graphs/programmer/index.ts:graph",
     "planner": "./apps/open-swe/src/graphs/planner/index.ts:graph",
