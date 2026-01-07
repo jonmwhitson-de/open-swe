@@ -10,6 +10,7 @@ import {
   createWriteDefaultTsConfigTool,
   createScratchpadTool,
 } from "../../../tools/index.js";
+import { getStore } from "@langchain/langgraph";
 import {
   GraphState,
   GraphConfig,
@@ -61,8 +62,11 @@ export async function takeAction(
     state,
     config,
   );
+  // Get store at node level where AsyncLocalStorage context is available
+  const store = getStore();
   const scratchpadTool = createScratchpadTool(
     "to save technical notes, observations, or reminders during programming",
+    store ?? undefined,
   );
 
   const higherContextLimitToolNames = [

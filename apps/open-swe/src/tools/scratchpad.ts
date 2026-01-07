@@ -1,22 +1,25 @@
 import { tool } from "@langchain/core/tools";
-import { getStore } from "@langchain/langgraph";
+import { getStore, type BaseStore } from "@langchain/langgraph";
 import { createScratchpadFields } from "@openswe/shared/open-swe/tools";
 
-export async function writeScratchpad(input: {
-  scratchpad: string[];
-}): Promise<{ result: string; status: "success" | "error" }> {
-  const store = getStore();
-  if (!store) {
+export async function writeScratchpad(
+  input: {
+    scratchpad: string[];
+  },
+  store?: BaseStore,
+): Promise<{ result: string; status: "success" | "error" }> {
+  const resolvedStore = store ?? getStore();
+  if (!resolvedStore) {
     return {
       result: "Unable to access scratchpad store.",
       status: "error",
     };
   }
 
-  const existing = await store.get(["scratchpad"], "notes");
+  const existing = await resolvedStore.get(["scratchpad"], "notes");
   const previousNotes = (existing?.value?.notes as string[] | undefined) ?? [];
 
-  await store.put(["scratchpad"], "notes", {
+  await resolvedStore.put(["scratchpad"], "notes", {
     notes: [...previousNotes, ...input.scratchpad],
   });
 
@@ -26,9 +29,9 @@ export async function writeScratchpad(input: {
   };
 }
 
-export function createScratchpadTool(whenMessage: string) {
+export function createScratchpadTool(whenMessage: string, store?: BaseStore) {
   const scratchpadTool = tool(
-    writeScratchpad,
+    (input: { scratchpad: string[] }) => writeScratchpad(input, store),
     createScratchpadFields(whenMessage),
   );
 
