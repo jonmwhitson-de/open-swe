@@ -7,7 +7,27 @@ import { TIMEOUT_SEC } from "@openswe/shared/constants";
 const TIMEOUT_EXIT_CODE = 124;
 const SHELL_NOT_AVAILABLE_EXIT_CODE = 127;
 
+/**
+ * Maximum output size to prevent memory issues and JSON serialization failures.
+ * When exceeded, we keep the start and end of the output.
+ */
+const MAX_OUTPUT_SIZE = 500_000; // 500KB per stream (stdout/stderr)
+const TRUNCATION_BUFFER = 200_000; // Keep 200KB from start and end
+
 const logger = createLogger(LogLevel.INFO, "LocalShellExecutor");
+
+/**
+ * Truncate output to prevent memory issues while preserving useful context.
+ * Keeps the beginning and end of the output when it exceeds the limit.
+ */
+function truncateStreamOutput(output: string): string {
+  if (output.length <= MAX_OUTPUT_SIZE) {
+    return output;
+  }
+
+  const truncationMarker = `\n\n... [${output.length - TRUNCATION_BUFFER * 2} characters truncated to prevent memory issues] ...\n\n`;
+  return output.slice(0, TRUNCATION_BUFFER) + truncationMarker + output.slice(-TRUNCATION_BUFFER);
+}
 
 // Candidate shell paths in order of preference
 const SHELL_PATHS = [
@@ -222,6 +242,10 @@ export class LocalShellExecutor {
       });
 
       child.on("close", (code) => {
+        // Truncate outputs to prevent memory issues and JSON serialization failures
+        const truncatedStdout = truncateStreamOutput(stdout);
+        const truncatedStderr = truncateStreamOutput(stderr);
+
         if (timedOut) {
           logger.warn("Local command exceeded timeout", {
             command,
@@ -231,8 +255,8 @@ export class LocalShellExecutor {
             exitCode: TIMEOUT_EXIT_CODE,
             result: timeoutMessage,
             artifacts: {
-              stdout,
-              stderr,
+              stdout: truncatedStdout,
+              stderr: truncatedStderr,
             },
           });
           return;
@@ -240,10 +264,10 @@ export class LocalShellExecutor {
 
         finish({
           exitCode: code ?? 0,
-          result: stdout,
+          result: truncatedStdout,
           artifacts: {
-            stdout,
-            stderr,
+            stdout: truncatedStdout,
+            stderr: truncatedStderr,
           },
         });
       });
@@ -258,8 +282,8 @@ export class LocalShellExecutor {
             exitCode: TIMEOUT_EXIT_CODE,
             result: timeoutMessage,
             artifacts: {
-              stdout,
-              stderr,
+              stdout: truncateStreamOutput(stdout),
+              stderr: truncateStreamOutput(stderr),
             },
           });
           return;
