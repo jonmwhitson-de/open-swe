@@ -24,6 +24,7 @@ import {
 import { createGrepTool } from "../../../tools/grep.js";
 import { createScratchpadTool } from "../../../tools/scratchpad.js";
 import { getMcpTools } from "../../../utils/mcp-client.js";
+import { getStore } from "@langchain/langgraph";
 import { getSandboxWithErrorHandling } from "../../../utils/sandbox.js";
 import { shouldDiagnoseError } from "../../../utils/tool-message-error.js";
 import { Command } from "@langchain/langgraph";
@@ -48,7 +49,9 @@ export async function takeActions(
   const viewTool = createViewTool(state, config);
   const shellTool = createShellTool(state, config);
   const searchTool = createGrepTool(state, config);
-  const scratchpadTool = createScratchpadTool("");
+  // Get store at node level where AsyncLocalStorage context is available
+  const store = getStore();
+  const scratchpadTool = createScratchpadTool("", store ?? undefined);
   const getURLContentTool = createGetURLContentTool(state);
   const searchDocumentForTool = createSearchDocumentForTool(state, config);
   const mcpTools = await getMcpTools(config);
