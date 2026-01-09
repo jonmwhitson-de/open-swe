@@ -166,7 +166,7 @@ async function handleProxyRequest(
     headers["x-openswe-preview-proxy"] = "true";
 
     // Prepare request body for methods that support it
-    let body: BodyInit | undefined;
+    let body: string | undefined;
     if (ctx.req.method !== "GET" && ctx.req.method !== "HEAD") {
       try {
         body = await ctx.req.text();
