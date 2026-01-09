@@ -8,10 +8,7 @@ import {
   isServerStarted,
   parsePortFromOutput,
 } from "../../utils/dev-server.js";
-import {
-  isLocalMode,
-  getLocalWorkingDirectory,
-} from "@openswe/shared/open-swe/local-mode";
+import { getLocalWorkingDirectory } from "@openswe/shared/open-swe/local-mode";
 
 const logger = createLogger(LogLevel.INFO, "DevServerRoute");
 
