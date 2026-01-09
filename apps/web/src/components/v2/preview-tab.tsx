@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Monitor,
   RefreshCw,
   ExternalLink,
   Loader2,
   AlertCircle,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,10 +32,23 @@ export function PreviewTab({ previewPort, isLoading }: PreviewTabProps) {
   const [customPort, setCustomPort] = useState<string>("");
   const [iframeKey, setIframeKey] = useState(0);
   const [iframeError, setIframeError] = useState(false);
+  const [useProxy, setUseProxy] = useState(true); // Default to using proxy
 
   // Use custom port if entered, otherwise use the port from props
   const activePort = customPort ? parseInt(customPort, 10) : previewPort;
-  const previewUrl = activePort ? `http://localhost:${activePort}` : null;
+
+  // Generate URLs - proxy URL routes through Next.js API to avoid CORS issues
+  const urls = useMemo(() => {
+    if (!activePort || isNaN(activePort)) {
+      return { proxy: null, direct: null };
+    }
+    return {
+      proxy: `/api/preview/${activePort}`,
+      direct: `http://localhost:${activePort}`,
+    };
+  }, [activePort]);
+
+  const previewUrl = useProxy ? urls.proxy : urls.direct;
 
   const handleRefresh = useCallback(() => {
     setIframeKey((prev) => prev + 1);
@@ -44,10 +60,17 @@ export function PreviewTab({ previewPort, isLoading }: PreviewTabProps) {
   }, []);
 
   const handleOpenExternal = useCallback(() => {
-    if (previewUrl) {
-      window.open(previewUrl, "_blank", "noopener,noreferrer");
+    // Always open the direct URL in external tab
+    if (urls.direct) {
+      window.open(urls.direct, "_blank", "noopener,noreferrer");
     }
-  }, [previewUrl]);
+  }, [urls.direct]);
+
+  const handleToggleProxy = useCallback((checked: boolean) => {
+    setUseProxy(checked);
+    setIframeError(false);
+    setIframeKey((prev) => prev + 1);
+  }, []);
 
   return (
     <Card className="border-border bg-card relative flex h-full min-h-0 flex-col p-0">
@@ -60,7 +83,27 @@ export function PreviewTab({ previewPort, isLoading }: PreviewTabProps) {
               Preview
             </span>
 
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-3">
+              {/* Proxy toggle */}
+              <div className="flex items-center gap-1.5">
+                <Switch
+                  id="proxy-mode"
+                  checked={useProxy}
+                  onCheckedChange={handleToggleProxy}
+                  className="h-4 w-7"
+                />
+                <Label
+                  htmlFor="proxy-mode"
+                  className="text-muted-foreground flex cursor-pointer items-center gap-1 text-xs"
+                  title="Use proxy to avoid CORS and networking issues"
+                >
+                  <Shield className="h-3 w-3" />
+                  Proxy
+                </Label>
+              </div>
+
+              <div className="bg-border h-4 w-px" />
+
               <Input
                 type="number"
                 placeholder="Port (e.g., 3000)"
@@ -84,7 +127,7 @@ export function PreviewTab({ previewPort, isLoading }: PreviewTabProps) {
                 variant="ghost"
                 size="sm"
                 onClick={handleOpenExternal}
-                disabled={!previewUrl}
+                disabled={!urls.direct}
                 className="h-7 w-7 p-0"
                 title="Open in new tab"
               >
@@ -112,18 +155,35 @@ export function PreviewTab({ previewPort, isLoading }: PreviewTabProps) {
                         Unable to load preview
                       </p>
                       <p className="text-muted-foreground text-sm">
-                        The development server at {previewUrl} may not be
+                        The development server on port {activePort} may not be
                         running or accessible.
                       </p>
+                      {useProxy && (
+                        <p className="text-muted-foreground text-xs">
+                          Try disabling the proxy toggle if the server is
+                          running locally.
+                        </p>
+                      )}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRefresh}
-                    >
-                      <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                      Try again
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRefresh}
+                      >
+                        <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                        Try again
+                      </Button>
+                      {useProxy && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToggleProxy(false)}
+                        >
+                          Try without proxy
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <iframe

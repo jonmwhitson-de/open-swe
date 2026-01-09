@@ -17,6 +17,7 @@ import {
 import { SANDBOX_DOCKER_IMAGE } from "../constants.js";
 import { createLogger, LogLevel } from "./logger.js";
 import { getWorkspacePathFromConfig } from "./workspace.js";
+import { allocatePortMappings, type PortMapping } from "./port-utils.js";
 
 const logger = createLogger(LogLevel.INFO, "Sandbox");
 
@@ -278,8 +279,14 @@ interface SandboxMetadata {
   appliedResources?: LocalDockerSandboxResources;
   /**
    * Ports exposed from the container for preview functionality.
+   * These are the host ports that map to container ports.
    */
   exposedPorts?: number[];
+  /**
+   * Port mappings from container ports to host ports.
+   * Useful when the host port differs from the container port.
+   */
+  portMappings?: PortMapping[];
 }
 
 const sandboxes = new Map<string, Sandbox>();
@@ -308,6 +315,28 @@ export function getSandboxPreviewPort(id: string): number | undefined {
 export function getSandboxExposedPorts(id: string): number[] | undefined {
   const metadata = sandboxMetadata.get(id);
   return metadata?.exposedPorts;
+}
+
+/**
+ * Get port mappings for a sandbox.
+ * Returns mappings from container ports to host ports.
+ */
+export function getSandboxPortMappings(id: string): PortMapping[] | undefined {
+  const metadata = sandboxMetadata.get(id);
+  return metadata?.portMappings;
+}
+
+/**
+ * Get the host port for a given container port in a sandbox.
+ * Useful for finding where a specific container service is accessible.
+ */
+export function getHostPortForContainer(
+  sandboxId: string,
+  containerPort: number,
+): number | undefined {
+  const mappings = getSandboxPortMappings(sandboxId);
+  const mapping = mappings?.find((m) => m.containerPort === containerPort);
+  return mapping?.hostPort;
 }
 
 function resolveRepoName(hostRepoPath?: string, provided?: string): string {
@@ -355,13 +384,25 @@ export async function createDockerSandbox(
     ? [{ source: hostCommitPath, target: containerRepoPath }]
     : undefined;
 
+  // Allocate available ports dynamically to avoid conflicts
+  const portMappings = await allocatePortMappings(SANDBOX_EXPOSED_PORTS);
+  const allocatedHostPorts = portMappings.map((m) => m.hostPort);
+
+  if (portMappings.length < SANDBOX_EXPOSED_PORTS.length) {
+    logger.warn("Some ports could not be allocated", {
+      requested: SANDBOX_EXPOSED_PORTS,
+      allocated: allocatedHostPorts,
+    });
+  }
+
   const resources: LocalDockerSandboxResources = {
     cpuCount: SANDBOX_CPU_COUNT,
     memoryBytes: SANDBOX_MEMORY_LIMIT_BYTES,
     networkDisabled: !SANDBOX_NETWORK_ENABLED,
     networkMode: SANDBOX_NETWORK_MODE,
     pidsLimit: SANDBOX_PIDS_LIMIT,
-    exposedPorts: SANDBOX_EXPOSED_PORTS,
+    // Use allocated host ports instead of fixed ports
+    exposedPorts: allocatedHostPorts,
   };
 
   const containerName = buildContainerName(repoName);
@@ -455,12 +496,14 @@ export async function createDockerSandbox(
     requestedResources,
     appliedResources,
     exposedPorts,
+    portMappings,
   });
 
   if (exposedPorts && exposedPorts.length > 0) {
     logger.info("Sandbox preview ports configured", {
       sandboxId: sandbox.id,
       exposedPorts,
+      portMappings: portMappings.map((m) => `${m.containerPort}->${m.hostPort}`),
     });
   }
 
