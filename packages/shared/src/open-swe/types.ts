@@ -355,6 +355,17 @@ export const GraphAnnotation = MessagesZodState.extend({
       fn: tokenDataReducer,
     },
   }),
+
+  /**
+   * The port number where the preview/dev server is running in the container.
+   * This is used by the frontend to display the app preview.
+   */
+  previewPort: withLangGraph(z.number().optional(), {
+    reducer: {
+      schema: z.number().optional(),
+      fn: (_state, update) => update,
+    },
+  }),
 });
 
 export type GraphState = z.infer<typeof GraphAnnotation>;

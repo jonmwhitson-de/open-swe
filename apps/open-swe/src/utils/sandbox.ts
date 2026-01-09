@@ -112,6 +112,23 @@ const SANDBOX_COMMAND_TIMEOUT_SEC = parsePositiveInt(
   DEFAULT_COMMAND_TIMEOUT_SEC,
 );
 
+/**
+ * Default ports to expose from the sandbox container for preview functionality.
+ * Common development server ports: 3000 (React/Next.js), 5173 (Vite), 8000 (Django), 8080 (generic)
+ */
+const DEFAULT_EXPOSED_PORTS = [3000, 5173, 8000, 8080, 4000, 5000];
+
+function parseExposedPorts(envValue: string | undefined): number[] {
+  if (!envValue) return DEFAULT_EXPOSED_PORTS;
+  const ports = envValue
+    .split(",")
+    .map((p) => parseInt(p.trim(), 10))
+    .filter((p) => !isNaN(p) && p > 0 && p < 65536);
+  return ports.length > 0 ? ports : DEFAULT_EXPOSED_PORTS;
+}
+
+const SANDBOX_EXPOSED_PORTS = parseExposedPorts(process.env.LOCAL_SANDBOX_EXPOSED_PORTS);
+
 const COMMIT_AUTHOR_NAME =
   process.env.GIT_AUTHOR_NAME?.trim() || DEFAULT_COMMIT_AUTHOR_NAME;
 const COMMIT_AUTHOR_EMAIL =
@@ -259,6 +276,10 @@ interface SandboxMetadata {
   commandTimeoutSec: number;
   requestedResources?: LocalDockerSandboxResources;
   appliedResources?: LocalDockerSandboxResources;
+  /**
+   * Ports exposed from the container for preview functionality.
+   */
+  exposedPorts?: number[];
 }
 
 const sandboxes = new Map<string, Sandbox>();
@@ -270,6 +291,23 @@ export function getSandbox(id: string): Sandbox | undefined {
 
 export function getSandboxMetadata(id: string): SandboxMetadata | undefined {
   return sandboxMetadata.get(id);
+}
+
+/**
+ * Get the primary preview port for a sandbox.
+ * Returns the first exposed port, which is typically the main dev server port.
+ */
+export function getSandboxPreviewPort(id: string): number | undefined {
+  const metadata = sandboxMetadata.get(id);
+  return metadata?.exposedPorts?.[0];
+}
+
+/**
+ * Get all exposed ports for a sandbox.
+ */
+export function getSandboxExposedPorts(id: string): number[] | undefined {
+  const metadata = sandboxMetadata.get(id);
+  return metadata?.exposedPorts;
 }
 
 function resolveRepoName(hostRepoPath?: string, provided?: string): string {
@@ -323,6 +361,7 @@ export async function createDockerSandbox(
     networkDisabled: !SANDBOX_NETWORK_ENABLED,
     networkMode: SANDBOX_NETWORK_MODE,
     pidsLimit: SANDBOX_PIDS_LIMIT,
+    exposedPorts: SANDBOX_EXPOSED_PORTS,
   };
 
   const containerName = buildContainerName(repoName);
@@ -400,6 +439,10 @@ export async function createDockerSandbox(
 
   const sandbox: Sandbox = { id: handle.id, process: sandboxProcess };
   sandboxes.set(sandbox.id, sandbox);
+
+  // Get exposed ports from handle metadata or resources
+  const exposedPorts = handle.metadata?.exposedPorts ?? resources.exposedPorts;
+
   sandboxMetadata.set(sandbox.id, {
     provider,
     hostRepoPath: hostCommitPath,
@@ -411,7 +454,15 @@ export async function createDockerSandbox(
     commandTimeoutSec,
     requestedResources,
     appliedResources,
+    exposedPorts,
   });
+
+  if (exposedPorts && exposedPorts.length > 0) {
+    logger.info("Sandbox preview ports configured", {
+      sandboxId: sandbox.id,
+      exposedPorts,
+    });
+  }
 
   return sandbox;
 }

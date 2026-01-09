@@ -10,6 +10,7 @@ import { getCodebaseTree } from "../../utils/tree.js";
 import {
   createDockerSandbox,
   getSandboxMetadata,
+  getSandboxPreviewPort,
 } from "../../utils/sandbox.js";
 import { getWorkspacePathFromConfig } from "../../utils/workspace.js";
 import { uploadRepoToContainer } from "@openswe/shared/upload-repo-to-container";
@@ -37,6 +38,7 @@ type InitializeSandboxState = {
   messages?: BaseMessage[];
   dependenciesInstalled?: boolean;
   customRules?: CustomRules;
+  previewPort?: number;
 };
 
 export async function initializeSandbox(
@@ -194,6 +196,9 @@ async function initializeSandboxLocal(
   // Create a mock sandbox ID for consistency
   const mockSandboxId = `local-${Date.now()}-${crypto.randomBytes(16).toString("hex")}`;
 
+  // In local mode, default to port 3000 for preview (most common dev server port)
+  const defaultLocalPreviewPort = 3000;
+
   return {
     sandboxSessionId: mockSandboxId,
     targetRepository,
@@ -202,6 +207,7 @@ async function initializeSandboxLocal(
     dependenciesInstalled: false,
     customRules: await getCustomRules(null as any, absoluteRepoDir, config),
     branchName: branchName,
+    previewPort: defaultLocalPreviewPort,
   };
 }
 
@@ -351,6 +357,9 @@ async function initializeSandboxRemote(
     );
   }
 
+  // Get the preview port for the sandbox (first exposed port)
+  const previewPort = getSandboxPreviewPort(sandbox.id);
+
   return {
     sandboxSessionId: sandbox.id,
     targetRepository,
@@ -359,5 +368,6 @@ async function initializeSandboxRemote(
     dependenciesInstalled: false,
     customRules: await getCustomRules(sandbox, repoDir, config),
     branchName,
+    previewPort,
   };
 }
