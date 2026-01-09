@@ -105,6 +105,178 @@ async function waitForServer(
   }
 }
 
+// Headers to forward from the client request
+const FORWARD_REQUEST_HEADERS = [
+  "content-type",
+  "accept",
+  "accept-language",
+  "authorization",
+  "cookie",
+  "x-requested-with",
+  "cache-control",
+];
+
+// Headers to forward from the upstream response
+const FORWARD_RESPONSE_HEADERS = [
+  "content-type",
+  "content-length",
+  "cache-control",
+  "etag",
+  "last-modified",
+  "set-cookie",
+  "location",
+];
+
+/**
+ * Handle proxy requests to the dev server.
+ * This function fetches content from localhost on the server side,
+ * allowing clients to access the dev server through the backend.
+ */
+async function handleProxyRequest(
+  ctx: import("hono").Context,
+  path: string,
+): Promise<Response> {
+  const portStr = ctx.req.param("port");
+  const port = parseInt(portStr, 10);
+
+  if (isNaN(port) || port < 1 || port > 65535) {
+    return ctx.json({ error: "Invalid port number" }, 400);
+  }
+
+  // Construct the target URL
+  const targetUrl = new URL(`http://localhost:${port}/${path}`);
+
+  // Copy query parameters
+  const url = new URL(ctx.req.url);
+  url.searchParams.forEach((value, key) => {
+    targetUrl.searchParams.append(key, value);
+  });
+
+  try {
+    // Build headers to forward
+    const headers: Record<string, string> = {};
+    FORWARD_REQUEST_HEADERS.forEach((header) => {
+      const value = ctx.req.header(header);
+      if (value) {
+        headers[header] = value;
+      }
+    });
+
+    // Add custom header to identify proxy requests
+    headers["x-openswe-preview-proxy"] = "true";
+
+    // Prepare request body for methods that support it
+    let body: BodyInit | undefined;
+    if (ctx.req.method !== "GET" && ctx.req.method !== "HEAD") {
+      try {
+        body = await ctx.req.text();
+      } catch {
+        // No body or failed to read
+      }
+    }
+
+    // Make the proxied request
+    const response = await fetch(targetUrl.toString(), {
+      method: ctx.req.method,
+      headers,
+      body,
+      redirect: "manual", // Handle redirects ourselves
+    });
+
+    // Build response headers
+    const responseHeaders = new Headers();
+    FORWARD_RESPONSE_HEADERS.forEach((header) => {
+      const value = response.headers.get(header);
+      if (value) {
+        // Handle location header for redirects - rewrite to go through proxy
+        if (header === "location") {
+          try {
+            const locationUrl = new URL(value, targetUrl);
+            if (
+              locationUrl.hostname === "localhost" &&
+              locationUrl.port === String(port)
+            ) {
+              // Rewrite to proxy URL
+              const proxyPath = `/dev-server/proxy/${port}${locationUrl.pathname}${locationUrl.search}`;
+              responseHeaders.set(header, proxyPath);
+              return;
+            }
+          } catch {
+            // Not a valid URL, forward as-is
+          }
+        }
+        responseHeaders.set(header, value);
+      }
+    });
+
+    // Add CORS headers to allow iframe access
+    responseHeaders.set("Access-Control-Allow-Origin", "*");
+    responseHeaders.set(
+      "Access-Control-Allow-Methods",
+      "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD",
+    );
+    responseHeaders.set(
+      "Access-Control-Allow-Headers",
+      FORWARD_REQUEST_HEADERS.join(", "),
+    );
+
+    // Remove X-Frame-Options if present (allows embedding in iframe)
+    responseHeaders.delete("x-frame-options");
+
+    // Handle different response types
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("text/html")) {
+      // For HTML responses, rewrite URLs to go through proxy
+      let html = await response.text();
+
+      // Rewrite absolute URLs to localhost to go through proxy
+      html = html.replace(
+        new RegExp(`(src|href|action)=["']http://localhost:${port}/`, "gi"),
+        `$1="/dev-server/proxy/${port}/`,
+      );
+      html = html.replace(
+        new RegExp(`(src|href|action)=["']/(?!dev-server/proxy)`, "gi"),
+        `$1="/dev-server/proxy/${port}/`,
+      );
+
+      return new Response(html, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: responseHeaders,
+      });
+    }
+
+    // For other content types, stream the response
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+    });
+  } catch (error) {
+    // Connection refused or other network error
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+    if (errorMessage.includes("ECONNREFUSED")) {
+      return ctx.json(
+        {
+          error: "Connection refused",
+          message: `No server running on port ${port}. Start your development server first.`,
+        },
+        503,
+      );
+    }
+
+    return ctx.json(
+      {
+        error: "Proxy error",
+        message: errorMessage,
+      },
+      502,
+    );
+  }
+}
+
 export function registerDevServerRoute(app: Hono) {
   /**
    * POST /dev-server/start
@@ -334,6 +506,21 @@ export function registerDevServerRoute(app: Hono) {
         500 as ContentfulStatusCode,
       );
     }
+  });
+
+  /**
+   * ALL /dev-server/proxy/:port/*
+   * Proxies requests to the dev server running on the specified port.
+   * This allows the frontend to access the dev server through the backend,
+   * bypassing client-side firewall/network restrictions.
+   */
+  app.all("/dev-server/proxy/:port", async (ctx) => {
+    return handleProxyRequest(ctx, "");
+  });
+
+  app.all("/dev-server/proxy/:port/*", async (ctx) => {
+    const path = ctx.req.param("*") || "";
+    return handleProxyRequest(ctx, path);
   });
 
   /**

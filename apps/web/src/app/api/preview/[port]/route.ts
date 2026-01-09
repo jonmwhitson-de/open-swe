@@ -1,14 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
+import { LOCAL_MODE_HEADER } from "@openswe/shared/constants";
 
 /**
  * Proxy route for preview root path.
- * Routes requests to localhost:<port>/ when no path is specified.
+ * Routes requests through the backend to access the dev server.
+ * This allows the preview to work even when the dev server is running
+ * on a remote server that the client can't directly access.
  *
  * Usage: /api/preview/<port>
- * Example: /api/preview/3000 -> http://localhost:3000/
+ * Example: /api/preview/3000 -> backend -> localhost:3000/
  */
 
-const ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"];
+const ALLOWED_METHODS = [
+  "GET",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "OPTIONS",
+  "HEAD",
+];
 const MAX_PORT = 65535;
 const MIN_PORT = 1;
 
@@ -23,7 +34,7 @@ const FORWARD_REQUEST_HEADERS = [
   "cache-control",
 ];
 
-// Headers to forward from the upstream response
+// Headers to forward from the backend response
 const FORWARD_RESPONSE_HEADERS = [
   "content-type",
   "content-length",
@@ -40,9 +51,18 @@ interface RouteParams {
   }>;
 }
 
+function getBackendUrl(): string {
+  return (
+    process.env.LANGGRAPH_API_URL ??
+    process.env.NEXT_PUBLIC_API_URL ??
+    "http://localhost:2024"
+  );
+}
+
 async function handleRequest(
   request: NextRequest,
   { params }: RouteParams,
+  path: string = "",
 ): Promise<NextResponse> {
   const resolvedParams = await params;
   const { port: portStr } = resolvedParams;
@@ -50,14 +70,12 @@ async function handleRequest(
   // Validate port
   const port = parseInt(portStr, 10);
   if (isNaN(port) || port < MIN_PORT || port > MAX_PORT) {
-    return NextResponse.json(
-      { error: "Invalid port number" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Invalid port number" }, { status: 400 });
   }
 
-  // Construct the target URL (root path)
-  const targetUrl = new URL(`http://localhost:${port}/`);
+  // Construct the backend proxy URL
+  const backendUrl = getBackendUrl();
+  const targetUrl = new URL(`${backendUrl}/dev-server/proxy/${port}/${path}`);
 
   // Copy query parameters
   request.nextUrl.searchParams.forEach((value, key) => {
@@ -74,8 +92,10 @@ async function handleRequest(
       }
     });
 
-    // Add custom header to identify proxy requests
-    headers["x-openswe-preview-proxy"] = "true";
+    // Add local mode header if configured
+    if (process.env.OPEN_SWE_LOCAL_MODE === "true") {
+      headers[LOCAL_MODE_HEADER] = "true";
+    }
 
     // Prepare request body for methods that support it
     let body: BodyInit | undefined;
@@ -87,12 +107,12 @@ async function handleRequest(
       }
     }
 
-    // Make the proxied request
+    // Make the proxied request to the backend
     const response = await fetch(targetUrl.toString(), {
       method: request.method,
       headers,
       body,
-      redirect: "manual", // Handle redirects ourselves
+      redirect: "manual",
     });
 
     // Build response headers
@@ -100,28 +120,34 @@ async function handleRequest(
     FORWARD_RESPONSE_HEADERS.forEach((header) => {
       const value = response.headers.get(header);
       if (value) {
-        // Handle location header for redirects - rewrite to go through proxy
+        // Handle location header for redirects - rewrite backend proxy URLs to frontend proxy URLs
         if (header === "location") {
           try {
-            const locationUrl = new URL(value, targetUrl);
-            if (locationUrl.hostname === "localhost" && locationUrl.port === String(port)) {
-              // Rewrite to proxy URL
-              const proxyPath = `/api/preview/${port}${locationUrl.pathname}${locationUrl.search}`;
-              responseHeaders.set(header, proxyPath);
-              return;
-            }
+            // Rewrite /dev-server/proxy/<port>/... to /api/preview/<port>/...
+            const rewritten = value.replace(
+              /\/dev-server\/proxy\/(\d+)\//g,
+              "/api/preview/$1/",
+            );
+            responseHeaders.set(header, rewritten);
+            return;
           } catch {
-            // Not a valid URL, forward as-is
+            // Forward as-is
           }
         }
         responseHeaders.set(header, value);
       }
     });
 
-    // Add CORS headers to allow iframe access
+    // Add CORS headers
     responseHeaders.set("Access-Control-Allow-Origin", "*");
-    responseHeaders.set("Access-Control-Allow-Methods", ALLOWED_METHODS.join(", "));
-    responseHeaders.set("Access-Control-Allow-Headers", FORWARD_REQUEST_HEADERS.join(", "));
+    responseHeaders.set(
+      "Access-Control-Allow-Methods",
+      ALLOWED_METHODS.join(", "),
+    );
+    responseHeaders.set(
+      "Access-Control-Allow-Headers",
+      FORWARD_REQUEST_HEADERS.join(", "),
+    );
 
     // Remove X-Frame-Options if present (allows embedding in iframe)
     responseHeaders.delete("x-frame-options");
@@ -130,17 +156,13 @@ async function handleRequest(
     const contentType = response.headers.get("content-type") || "";
 
     if (contentType.includes("text/html")) {
-      // For HTML responses, rewrite URLs to go through proxy
+      // For HTML responses, rewrite backend proxy URLs to frontend proxy URLs
       let html = await response.text();
 
-      // Rewrite absolute URLs to localhost to go through proxy
+      // Rewrite /dev-server/proxy/<port>/... to /api/preview/<port>/...
       html = html.replace(
-        new RegExp(`(src|href|action)=["']http://localhost:${port}/`, "gi"),
-        `$1="/api/preview/${port}/`,
-      );
-      html = html.replace(
-        new RegExp(`(src|href|action)=["']/(?!api/preview)`, "gi"),
-        `$1="/api/preview/${port}/`,
+        /\/dev-server\/proxy\/(\d+)\//g,
+        "/api/preview/$1/",
       );
 
       return new NextResponse(html, {
@@ -157,14 +179,15 @@ async function handleRequest(
       headers: responseHeaders,
     });
   } catch (error) {
-    // Connection refused or other network error
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
 
     if (errorMessage.includes("ECONNREFUSED")) {
       return NextResponse.json(
         {
-          error: "Connection refused",
-          message: `No server running on port ${port}. Start your development server first.`,
+          error: "Backend unavailable",
+          message:
+            "Cannot connect to the backend server. Please ensure it is running.",
         },
         { status: 503 },
       );
@@ -201,7 +224,7 @@ export async function DELETE(request: NextRequest, params: RouteParams) {
   return handleRequest(request, params);
 }
 
-export async function OPTIONS(request: NextRequest, params: RouteParams) {
+export async function OPTIONS() {
   // Handle CORS preflight
   return new NextResponse(null, {
     status: 204,
