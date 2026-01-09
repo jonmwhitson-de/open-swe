@@ -26,6 +26,11 @@ export interface SandboxMetadata {
   containerName?: string;
   requestedResources?: SandboxResourceLimits;
   appliedResources?: SandboxResourceLimits;
+  /**
+   * Ports that are exposed from the container for preview functionality.
+   * The first port in this array is typically the primary preview port.
+   */
+  exposedPorts?: number[];
 }
 
 export interface SandboxHandle {

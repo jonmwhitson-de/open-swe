@@ -131,6 +131,12 @@ export interface LocalDockerSandboxResources {
   networkDisabled?: boolean;
   networkMode?: string;
   pidsLimit?: number;
+  /**
+   * Ports to expose from the container for preview functionality.
+   * These ports will be mapped to the same port on the host.
+   * Common ports: 3000 (React/Next.js), 5173 (Vite), 8000 (Django), 8080 (generic)
+   */
+  exposedPorts?: number[];
 }
 
 export interface LocalDockerSandboxOptions {
@@ -199,6 +205,17 @@ export class LocalDockerSandboxProvider implements SandboxProvider {
         ? requestedPidsLimit
         : DEFAULT_PIDS_LIMIT;
 
+    // Configure port bindings for preview functionality
+    const exposedPorts = this.options.resources?.exposedPorts ?? [];
+    const portBindings: Record<string, { HostPort: string }[]> = {};
+    const exposedPortsConfig: Record<string, object> = {};
+
+    for (const port of exposedPorts) {
+      const portKey = `${port}/tcp`;
+      portBindings[portKey] = [{ HostPort: String(port) }];
+      exposedPortsConfig[portKey] = {};
+    }
+
     const hostConfig: Docker.ContainerCreateOptions["HostConfig"] = {
       Binds: binds,
       Tmpfs: {
@@ -211,6 +228,7 @@ export class LocalDockerSandboxProvider implements SandboxProvider {
       Memory: memoryBytes,
       ReadonlyRootfs: true,
       PidsLimit: pidsLimit,
+      ...(exposedPorts.length > 0 ? { PortBindings: portBindings } : {}),
     };
 
     const createOpts: Docker.ContainerCreateOptions = {
@@ -227,10 +245,15 @@ export class LocalDockerSandboxProvider implements SandboxProvider {
       Labels: {
         "openswe.sandbox": "local-docker",
       },
+      ...(exposedPorts.length > 0 ? { ExposedPorts: exposedPortsConfig } : {}),
     };
 
     // eslint-disable-next-line no-console
     console.log("[Sandbox] Docker HostConfig.Binds =", createOpts?.HostConfig?.Binds);
+    if (exposedPorts.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log("[Sandbox] Exposed ports for preview =", exposedPorts);
+    }
 
     const container = await this.docker.createContainer(createOpts);
 
@@ -268,6 +291,7 @@ export class LocalDockerSandboxProvider implements SandboxProvider {
           inspectData.Name?.replace(/^\//, "") ?? this.options.containerName,
         requestedResources,
         appliedResources,
+        exposedPorts: exposedPorts.length > 0 ? exposedPorts : undefined,
       },
       process: {
         executeCommand: async (

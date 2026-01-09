@@ -15,6 +15,7 @@ import {
   updatePlan,
   summarizeHistory,
   handleCompletedTask,
+  startDevServer,
 } from "./nodes/index.js";
 import { BaseMessage, isAIMessage } from "@langchain/core/messages";
 import { initializeSandbox } from "../shared/initialize-sandbox.js";
@@ -143,7 +144,7 @@ const workflow = new StateGraph(GraphAnnotation, GraphConfiguration)
     ],
   })
   .addNode("generate-conclusion", generateConclusion, {
-    ends: ["open-pr", END],
+    ends: ["start-dev-server", END],
   })
   .addNode("request-help", requestHelp, {
     ends: ["generate-action", END],
@@ -152,6 +153,7 @@ const workflow = new StateGraph(GraphAnnotation, GraphConfiguration)
     ends: ["generate-conclusion", "reviewer-subgraph"],
   })
   .addNode("reviewer-subgraph", reviewerGraph)
+  .addNode("start-dev-server", startDevServer)
   .addNode("open-pr", openPullRequest)
   .addNode("diagnose-error", diagnoseError)
   .addNode("summarize-history", summarizeHistory)
@@ -172,6 +174,7 @@ const workflow = new StateGraph(GraphAnnotation, GraphConfiguration)
     "generate-action",
   ])
   .addEdge("summarize-history", "generate-action")
+  .addEdge("start-dev-server", "open-pr")
   .addEdge("open-pr", END);
 
 // Zod types are messed up

@@ -17,7 +17,7 @@ import {
 } from "@openswe/shared/open-swe/tasks";
 import { trackCachePerformance } from "../../../utils/caching.js";
 import { getModelManager } from "../../../utils/llms/model-manager.js";
-import { Command, END } from "@langchain/langgraph";
+import { Command } from "@langchain/langgraph";
 
 const logger = createLogger(LogLevel.INFO, "GenerateConclusionNode");
 
@@ -85,6 +85,6 @@ Given all of this, please respond with the concise conclusion. Do not include an
   };
   return new Command({
     update: graphUpdate,
-    goto: END,
+    goto: "start-dev-server",
   });
 }

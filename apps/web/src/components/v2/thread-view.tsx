@@ -59,11 +59,12 @@ import { HumanMessage as HumanMessageSDK } from "@langchain/langgraph-sdk";
 import { getMessageContentString } from "@/lib/get-message-content-string";
 import { FeatureInsightsPanel } from "@/features/feature-insights";
 import { useFeatureGraphStore } from "@/stores/feature-graph-store";
+import { PreviewTab } from "./preview-tab";
 
-type ThreadTab = "feature-graph" | "planner" | "programmer";
+type ThreadTab = "feature-graph" | "planner" | "programmer" | "preview";
 
 const isThreadTab = (value: string): value is ThreadTab =>
-  value === "planner" || value === "programmer" || value === "feature-graph";
+  value === "planner" || value === "programmer" || value === "feature-graph" || value === "preview";
 
 export const shouldAutoGenerateFeatureGraph = ({
   managerIsLoading,
@@ -1181,6 +1182,7 @@ export function ThreadView({
                   </TabsTrigger>
                   <TabsTrigger value="planner">Planner</TabsTrigger>
                   <TabsTrigger value="programmer">Programmer</TabsTrigger>
+                  <TabsTrigger value="preview">Preview</TabsTrigger>
                 </TabsList>
 
                 {programmerTaskPlan && (
@@ -1416,6 +1418,15 @@ export function ThreadView({
                     </StickToBottom>
                   </CardContent>
                 </Card>
+              </TabsContent>
+              <TabsContent
+                value="preview"
+                className="flex h-full min-h-0 flex-1 flex-col"
+              >
+                <PreviewTab
+                  previewPort={programmerStream.values?.previewPort}
+                  isLoading={programmerStream.isLoading}
+                />
               </TabsContent>
             </Tabs>
           </div>
