@@ -1426,6 +1426,7 @@ export function ThreadView({
                 <PreviewTab
                   previewPort={programmerStream.values?.previewPort}
                   isLoading={programmerStream.isLoading}
+                  sandboxSessionId={programmerStream.values?.sandboxSessionId}
                 />
               </TabsContent>
             </Tabs>
