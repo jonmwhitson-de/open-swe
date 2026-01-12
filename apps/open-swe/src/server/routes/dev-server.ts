@@ -1,14 +1,14 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { createLogger, LogLevel } from "../../utils/logger.js";
-import { createShellExecutor } from "../../utils/shell-executor/index.js";
+import { createShellExecutor, isShellAvailable, findAvailableShell } from "../../utils/shell-executor/index.js";
 import { getSandboxMetadata } from "../../utils/sandbox.js";
 import {
   detectDevServer,
   isServerStarted,
   parsePortFromOutput,
 } from "../../utils/dev-server.js";
-import { getLocalWorkingDirectory } from "@openswe/shared/open-swe/local-mode";
+import { getLocalWorkingDirectory, isLocalModeFromEnv } from "@openswe/shared/open-swe/local-mode";
 
 const logger = createLogger(LogLevel.INFO, "DevServerRoute");
 
@@ -117,9 +117,9 @@ const FORWARD_REQUEST_HEADERS = [
 ];
 
 // Headers to forward from the upstream response
+// Note: content-length is intentionally excluded because we may modify the response body
 const FORWARD_RESPONSE_HEADERS = [
   "content-type",
-  "content-length",
   "cache-control",
   "etag",
   "last-modified",
@@ -284,7 +284,27 @@ export function registerDevServerRoute(app: Hono) {
    */
   app.post("/dev-server/start", async (ctx) => {
     const requestStartedAt = Date.now();
-    logger.info("Received dev server start request");
+    logger.info("Received dev server start request", {
+      localMode: isLocalModeFromEnv(),
+      shellAvailable: isShellAvailable(),
+      availableShell: findAvailableShell(),
+    });
+
+    // Check shell availability early for local mode
+    if (isLocalModeFromEnv() && !isShellAvailable()) {
+      const shell = findAvailableShell();
+      logger.error("No shell available for local mode", {
+        availableShell: shell,
+      });
+      return ctx.json<StartDevServerResponse>(
+        {
+          success: false,
+          message: "No shell available to execute commands",
+          error: `No shell found. Checked: /bin/bash, /usr/bin/bash, /bin/sh, /usr/bin/sh`,
+        },
+        500 as ContentfulStatusCode,
+      );
+    }
 
     let body: StartDevServerRequest;
     try {
@@ -304,6 +324,13 @@ export function registerDevServerRoute(app: Hono) {
     }
 
     const { sandboxSessionId, command, port = 3000, workdir } = body;
+
+    logger.info("Processing dev server start", {
+      sandboxSessionId,
+      command,
+      port,
+      workdir,
+    });
 
     // Determine working directory
     let effectiveWorkdir = workdir;
@@ -383,6 +410,12 @@ export function registerDevServerRoute(app: Hono) {
     const backgroundCommand = `nohup ${portedCommand} > ${logFile} 2>&1 & echo $! > ${pidFile}`;
 
     try {
+      logger.info("Executing background command", {
+        command: backgroundCommand,
+        workdir: effectiveWorkdir,
+        shell: findAvailableShell(),
+      });
+
       const startResult = await executor.executeCommand({
         command: backgroundCommand,
         workdir: effectiveWorkdir,
@@ -393,13 +426,15 @@ export function registerDevServerRoute(app: Hono) {
       if (startResult.exitCode !== 0) {
         logger.error("Failed to start dev server", {
           exitCode: startResult.exitCode,
-          output: startResult.result || startResult.artifacts?.stderr,
+          stdout: startResult.artifacts?.stdout,
+          stderr: startResult.artifacts?.stderr,
+          result: startResult.result,
         });
         return ctx.json<StartDevServerResponse>(
           {
             success: false,
             message: "Failed to start dev server",
-            error: startResult.result || startResult.artifacts?.stderr,
+            error: startResult.result || startResult.artifacts?.stderr || `Exit code: ${startResult.exitCode}`,
           },
           500 as ContentfulStatusCode,
         );
@@ -440,15 +475,30 @@ export function registerDevServerRoute(app: Hono) {
         });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
       logger.error("Error starting dev server", {
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
+        stack: errorStack,
         durationMs: Date.now() - requestStartedAt,
+        localMode: isLocalModeFromEnv(),
+        shell: findAvailableShell(),
+        workdir: effectiveWorkdir,
       });
+
+      // Provide helpful error message for common issues
+      let helpfulMessage = errorMessage;
+      if (errorMessage.includes("ENOENT")) {
+        helpfulMessage = `Command not found or shell unavailable. Shell: ${findAvailableShell() || "none"}. Original error: ${errorMessage}`;
+      } else if (errorMessage.includes("EACCES")) {
+        helpfulMessage = `Permission denied. Check that the working directory exists and is accessible. Original error: ${errorMessage}`;
+      }
+
       return ctx.json<StartDevServerResponse>(
         {
           success: false,
           message: "Error starting dev server",
-          error: error instanceof Error ? error.message : String(error),
+          error: helpfulMessage,
         },
         500 as ContentfulStatusCode,
       );
