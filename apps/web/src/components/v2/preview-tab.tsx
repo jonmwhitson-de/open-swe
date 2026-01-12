@@ -59,6 +59,12 @@ interface StartServerResponse {
   port?: number;
   message: string;
   error?: string;
+  backendUrl?: string;
+  debug?: {
+    originalError?: string;
+    errorType?: string;
+    env?: Record<string, string | undefined>;
+  };
 }
 
 export function PreviewTab({
@@ -171,7 +177,16 @@ export function PreviewTab({
         }, 1000);
       } else {
         console.error("[Preview] Server start failed:", result);
-        setServerError(result.error || result.message);
+        if (result.debug) {
+          console.error("[Preview] Debug info:", result.debug);
+          console.error("[Preview] Backend URL:", result.backendUrl);
+        }
+        // Show a more detailed error message
+        let errorMsg = result.error || result.message;
+        if (result.backendUrl) {
+          errorMsg += ` (backend: ${result.backendUrl})`;
+        }
+        setServerError(errorMsg);
       }
     } catch (error) {
       console.error("[Preview] Error starting server:", error);
