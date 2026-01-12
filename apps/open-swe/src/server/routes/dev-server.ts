@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { createLogger, LogLevel } from "../../utils/logger.js";
-import { createShellExecutor, isShellAvailable, findAvailableShell } from "../../utils/shell-executor/index.js";
+import { createShellExecutor, isShellAvailable, findAvailableShell, resetShellCache } from "../../utils/shell-executor/index.js";
 import { getSandboxMetadata } from "../../utils/sandbox.js";
 import {
   detectDevServer,
@@ -284,23 +284,30 @@ export function registerDevServerRoute(app: Hono) {
    */
   app.post("/dev-server/start", async (ctx) => {
     const requestStartedAt = Date.now();
+
+    // Reset shell cache to ensure fresh detection
+    resetShellCache();
+
+    const shellAvailable = isShellAvailable();
+    const availableShell = findAvailableShell();
+
     logger.info("Received dev server start request", {
       localMode: isLocalModeFromEnv(),
-      shellAvailable: isShellAvailable(),
-      availableShell: findAvailableShell(),
+      shellAvailable,
+      availableShell,
     });
 
     // Check shell availability early for local mode
-    if (isLocalModeFromEnv() && !isShellAvailable()) {
-      const shell = findAvailableShell();
+    if (isLocalModeFromEnv() && !shellAvailable) {
       logger.error("No shell available for local mode", {
-        availableShell: shell,
+        availableShell,
+        checkedPaths: ["/bin/bash", "/usr/bin/bash", "/bin/sh", "/usr/bin/sh", "/usr/local/bin/bash", "/usr/local/bin/sh"],
       });
       return ctx.json<StartDevServerResponse>(
         {
           success: false,
           message: "No shell available to execute commands",
-          error: `No shell found. Checked: /bin/bash, /usr/bin/bash, /bin/sh, /usr/bin/sh`,
+          error: `No working shell found. The backend environment may not have bash or sh installed. Checked: /bin/bash, /usr/bin/bash, /bin/sh, /usr/bin/sh, /usr/local/bin/bash, /usr/local/bin/sh`,
         },
         500 as ContentfulStatusCode,
       );
