@@ -35,9 +35,9 @@ const FORWARD_REQUEST_HEADERS = [
 ];
 
 // Headers to forward from the backend response
+// Note: content-length is intentionally excluded because we may modify the response body
 const FORWARD_RESPONSE_HEADERS = [
   "content-type",
-  "content-length",
   "cache-control",
   "etag",
   "last-modified",
