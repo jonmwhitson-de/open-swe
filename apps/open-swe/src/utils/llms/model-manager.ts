@@ -186,13 +186,16 @@ export class ModelManager {
       : undefined;
     const isGpt5 = modelName.includes("gpt-5");
     const isOSeriesModel = /^o[1-9]/.test(modelName);
-    const isReasoningModel = isGpt5 || isOSeriesModel;
+    const isCodexModel = modelName.includes("codex");
+    const isReasoningModel = isGpt5 || isOSeriesModel || isCodexModel;
     const isAzureGpt5 = provider === "azure-openai" && isGpt5;
     const isAzureOSeries = provider === "azure-openai" && isOSeriesModel;
+    const isAzureCodex = provider === "azure-openai" && isCodexModel;
+    const isAzureReasoningModel = isAzureGpt5 || isAzureOSeries || isAzureCodex;
     const reasoningPayload = isReasoningModel
       ? {
-          effort: (isAzureGpt5 || isAzureOSeries) ? "high" : reasoningEffort,
-          max_tokens: (isAzureGpt5 || isAzureOSeries)
+          effort: isAzureReasoningModel ? "high" : reasoningEffort,
+          max_tokens: isAzureReasoningModel
             ? GPT5_MAX_REASONING_TOKENS
             : reasoningTokens,
         }
@@ -308,7 +311,7 @@ export class ModelManager {
 
       if (provider && modelName) {
         const isThinkingModel = baseConfig.thinkingModel;
-        const isModelReasoningCapable = modelName.includes("gpt-5") || /^o[1-9]/.test(modelName);
+        const isModelReasoningCapable = modelName.includes("gpt-5") || /^o[1-9]/.test(modelName) || modelName.includes("codex");
         selectedModelConfig = {
           provider,
           modelName,
@@ -347,9 +350,10 @@ export class ModelManager {
         // Check if fallback model is a thinking/reasoning model
         const isThinkingModel =
           (provider === "openai" && fallbackModel.modelName.startsWith("o")) ||
-          fallbackModel.modelName.includes("extended-thinking");
+          fallbackModel.modelName.includes("extended-thinking") ||
+          fallbackModel.modelName.includes("codex");
         const isFallbackReasoningCapable =
-          fallbackModel.modelName.includes("gpt-5") || /^o[1-9]/.test(fallbackModel.modelName);
+          fallbackModel.modelName.includes("gpt-5") || /^o[1-9]/.test(fallbackModel.modelName) || fallbackModel.modelName.includes("codex");
 
         const fallbackConfig = {
           ...fallbackModel,
@@ -500,12 +504,17 @@ export class ModelManager {
     if (modelProvider === "openai" && modelName.startsWith("o")) {
       thinkingModel = true;
     }
+    // Codex models (e.g., codex-mini) are fine-tuned reasoning models based on o4-mini
+    if (modelName.includes("codex")) {
+      thinkingModel = true;
+    }
 
     const thinkingBudgetTokens = THINKING_BUDGET_TOKENS;
 
     const provider = modelProvider as Provider;
     const isOSeriesModel = /^o[1-9]/.test(modelName);
-    const isReasoningCapable = modelName.includes("gpt-5") || isOSeriesModel;
+    const isCodexModel = modelName.includes("codex");
+    const isReasoningCapable = modelName.includes("gpt-5") || isOSeriesModel || isCodexModel;
     const isAzureReasoningModel = provider === "azure-openai" && isReasoningCapable;
 
     return {
@@ -574,7 +583,8 @@ export class ModelManager {
       return null;
     }
     const isOSeriesModel = /^o[1-9]/.test(modelName);
-    const isReasoningCapable = modelName.includes("gpt-5") || isOSeriesModel;
+    const isCodexModel = modelName.includes("codex");
+    const isReasoningCapable = modelName.includes("gpt-5") || isOSeriesModel || isCodexModel;
     const isAzureReasoningModel = provider === "azure-openai" && isReasoningCapable;
 
     return {

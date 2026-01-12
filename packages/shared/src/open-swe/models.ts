@@ -105,6 +105,10 @@ export const MODEL_OPTIONS = [
     value: "azure-openai:gpt-4.1-mini",
   },
   {
+    label: "Azure Codex Mini",
+    value: "azure-openai:codex-mini",
+  },
+  {
     label: "Gemini 2.5 Pro",
     value: "google-genai:gemini-2.5-pro",
   },
