@@ -230,14 +230,34 @@ async function handleProxyRequest(
       // For HTML responses, rewrite URLs to go through proxy
       let html = await response.text();
 
+      // Inject a <base> tag to ensure all relative URLs resolve through the proxy
+      // This is critical for assets, scripts, stylesheets, etc.
+      const baseTag = `<base href="/dev-server/proxy/${port}/">`;
+
+      // Insert base tag right after <head> if present
+      if (html.includes("<head>")) {
+        html = html.replace("<head>", `<head>${baseTag}`);
+      } else if (html.includes("<head ")) {
+        html = html.replace(/<head([^>]*)>/, `<head$1>${baseTag}`);
+      } else if (html.includes("<HEAD>")) {
+        html = html.replace("<HEAD>", `<HEAD>${baseTag}`);
+      } else if (html.includes("<html")) {
+        html = html.replace(/<html([^>]*)>/, `<html$1><head>${baseTag}</head>`);
+      } else {
+        html = `<head>${baseTag}</head>${html}`;
+      }
+
       // Rewrite absolute URLs to localhost to go through proxy
       html = html.replace(
         new RegExp(`(src|href|action)=["']http://localhost:${port}/`, "gi"),
         `$1="/dev-server/proxy/${port}/`,
       );
+
+      // Rewrite absolute paths starting with / to go through proxy
+      // Match various attributes that can contain URLs
       html = html.replace(
-        new RegExp(`(src|href|action)=["']/(?!dev-server/proxy)`, "gi"),
-        `$1="/dev-server/proxy/${port}/`,
+        new RegExp(`(src|href|action|data|poster|srcset)=["']/(?!dev-server/proxy)([^"']*)["']`, "gi"),
+        `$1="/dev-server/proxy/${port}/$2"`,
       );
 
       return new Response(html, {

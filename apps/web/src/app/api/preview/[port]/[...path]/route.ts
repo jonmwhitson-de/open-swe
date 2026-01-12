@@ -160,33 +160,26 @@ async function handleRequest(
       // For HTML responses, rewrite backend proxy URLs to frontend proxy URLs
       let html = await response.text();
 
-      // Rewrite /dev-server/proxy/<port>/... to /api/preview/<port>/...
+      // Replace backend base tag with frontend base tag
+      // The backend injects: <base href="/dev-server/proxy/{port}/">
+      // We need to replace it with: <base href="/api/preview/{port}/">
+      html = html.replace(
+        /<base\s+href=["']\/dev-server\/proxy\/(\d+)\/["']\s*\/?>/gi,
+        `<base href="/api/preview/$1/">`,
+      );
+
+      // Rewrite all /dev-server/proxy/<port>/... URLs to /api/preview/<port>/...
+      // This catches URLs in attributes, inline scripts, etc.
       html = html.replace(
         /\/dev-server\/proxy\/(\d+)\//g,
         "/api/preview/$1/",
       );
 
-      // Inject a <base> tag to ensure all relative URLs resolve through the proxy
-      // This is critical for assets like /assets/main.js to load as /api/preview/<port>/assets/main.js
-      const baseTag = `<base href="/api/preview/${port}/">`;
-
-      // Insert base tag right after <head> if present
-      if (html.includes("<head>")) {
-        html = html.replace("<head>", `<head>${baseTag}`);
-      } else if (html.includes("<head ")) {
-        // Handle <head with attributes
-        html = html.replace(/<head([^>]*)>/, `<head$1>${baseTag}`);
-      } else if (html.includes("<HEAD>")) {
-        html = html.replace("<HEAD>", `<HEAD>${baseTag}`);
-      } else {
-        // If no head tag, try to insert at the start of html tag or at beginning
-        if (html.includes("<html")) {
-          html = html.replace(/<html([^>]*)>/, `<html$1><head>${baseTag}</head>`);
-        } else {
-          // Prepend to document
-          html = `<head>${baseTag}</head>${html}`;
-        }
-      }
+      // Also handle /dev-server/proxy/<port>" (without trailing slash, at end of attribute)
+      html = html.replace(
+        /\/dev-server\/proxy\/(\d+)"/g,
+        '/api/preview/$1/"',
+      );
 
       return new NextResponse(html, {
         status: response.status,
