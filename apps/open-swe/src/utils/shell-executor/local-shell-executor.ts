@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { accessSync, constants } from "fs";
 import { LocalExecuteResponse } from "./types.js";
 import { createLogger, LogLevel } from "../logger.js";
@@ -35,10 +35,30 @@ const SHELL_PATHS = [
   "/usr/bin/bash",
   "/bin/sh",
   "/usr/bin/sh",
+  // Also try common locations on different systems
+  "/usr/local/bin/bash",
+  "/usr/local/bin/sh",
 ];
 
 // Cached available shell path - checked once and reused
 let cachedAvailableShell: string | null | undefined = undefined;
+
+/**
+ * Test if a shell actually works by trying to run a simple command.
+ * This is more reliable than just checking if the file exists.
+ */
+function testShell(shellPath: string): boolean {
+  try {
+    const result = spawnSync(shellPath, ["-c", "echo test"], {
+      timeout: 5000,
+      encoding: "utf-8",
+    });
+    return result.status === 0 && result.stdout?.includes("test");
+  } catch (error) {
+    logger.debug("Shell test failed", { shellPath, error: error instanceof Error ? error.message : String(error) });
+    return false;
+  }
+}
 
 /**
  * Check if a shell executable exists and is executable.
@@ -53,11 +73,17 @@ export function findAvailableShell(): string | null {
 
   for (const shellPath of SHELL_PATHS) {
     try {
-      // Check if file exists and is executable
+      // First check if file exists and is executable
       accessSync(shellPath, constants.X_OK);
-      cachedAvailableShell = shellPath;
-      logger.info("Found available shell", { shellPath });
-      return shellPath;
+
+      // Then actually test the shell works
+      if (testShell(shellPath)) {
+        cachedAvailableShell = shellPath;
+        logger.info("Found available shell", { shellPath });
+        return shellPath;
+      } else {
+        logger.debug("Shell exists but test failed", { shellPath });
+      }
     } catch {
       // Shell not available at this path, try next
       continue;
