@@ -507,8 +507,11 @@ export function createCodeReviewMarkTaskNotCompleteFields() {
       ),
     additional_actions: z
       .array(z.string())
+      .max(5)
       .describe(
-        "A list of additional actions to take which will successfully satisfy your review, and complete the task.",
+        "A list of additional actions to take which will successfully satisfy your review, and complete the task. " +
+          "IMPORTANT: Focus only on the most critical missing items. Maximum 5 actions allowed. " +
+          "Prioritize actions that directly address functional requirements over style/formatting issues.",
       ),
   });
 
@@ -516,7 +519,8 @@ export function createCodeReviewMarkTaskNotCompleteFields() {
     name: "code_review_mark_task_not_complete",
     schema: markTaskNotCompleteSchema,
     description:
-      "Use this tool to mark a task as not complete. This should be called if you determine that the task has not been successfully completed, and you have additional tasks the programmer should take to successfully complete the task.",
+      "Use this tool to mark a task as not complete. This should be called if you determine that the task has not been successfully completed, and you have additional tasks the programmer should take to successfully complete the task. " +
+      "Only include the most critical missing actions (max 5). Avoid adding minor improvements or optimizations.",
   };
 }
 

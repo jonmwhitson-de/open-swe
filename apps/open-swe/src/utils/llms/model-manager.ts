@@ -185,11 +185,14 @@ export class ModelManager {
       ? thinkingBudgetTokens * 4
       : undefined;
     const isGpt5 = modelName.includes("gpt-5");
+    const isOSeriesModel = /^o[1-9]/.test(modelName);
+    const isReasoningModel = isGpt5 || isOSeriesModel;
     const isAzureGpt5 = provider === "azure-openai" && isGpt5;
-    const reasoningPayload = isGpt5
+    const isAzureOSeries = provider === "azure-openai" && isOSeriesModel;
+    const reasoningPayload = isReasoningModel
       ? {
-          effort: isAzureGpt5 ? "high" : reasoningEffort,
-          max_tokens: isAzureGpt5
+          effort: (isAzureGpt5 || isAzureOSeries) ? "high" : reasoningEffort,
+          max_tokens: (isAzureGpt5 || isAzureOSeries)
             ? GPT5_MAX_REASONING_TOKENS
             : reasoningTokens,
         }
@@ -234,13 +237,15 @@ export class ModelManager {
         endpoint,
       });
 
-      const useMaxCompletion = isGpt5;
+      const useMaxCompletion = isReasoningModel;
 
       logger.info("Initializing Azure OpenAI model", {
         apiVersion,
         apiVersionEnvVar,
         endpoint,
         modelName,
+        isReasoningModel,
+        reasoningEffort: reasoningPayload?.effort,
         ...(useMaxCompletion
           ? { max_completion_tokens: finalMaxTokens, temperature: 1 }
           : { maxTokens: finalMaxTokens, temperature }),
@@ -252,7 +257,7 @@ export class ModelManager {
         ...(useMaxCompletion
           ? { max_completion_tokens: finalMaxTokens, temperature: 1 }
           : { maxTokens: finalMaxTokens, temperature }),
-        ...(isGpt5 ? { reasoning: reasoningPayload } : {}),
+        ...(isReasoningModel ? { reasoning: reasoningPayload } : {}),
         openAIApiVersion: apiVersion,
       });
     }
@@ -266,7 +271,7 @@ export class ModelManager {
             thinking: { budget_tokens: thinkingBudgetTokens, type: "enabled" },
             maxTokens: thinkingMaxTokens,
           }
-        : isGpt5
+        : isReasoningModel
           ? {
               max_completion_tokens: finalMaxTokens,
               temperature: 1,
@@ -275,7 +280,7 @@ export class ModelManager {
               maxTokens: finalMaxTokens,
               temperature: thinkingModel ? undefined : temperature,
             }),
-      ...(isGpt5 ? { reasoning: reasoningPayload } : {}),
+      ...(isReasoningModel ? { reasoning: reasoningPayload } : {}),
     };
 
     logger.debug("Initializing model", {
@@ -303,12 +308,13 @@ export class ModelManager {
 
       if (provider && modelName) {
         const isThinkingModel = baseConfig.thinkingModel;
+        const isModelReasoningCapable = modelName.includes("gpt-5") || /^o[1-9]/.test(modelName);
         selectedModelConfig = {
           provider,
           modelName,
           reasoningEffort: baseConfig.reasoningEffort,
           reasoningTokens: baseConfig.reasoningTokens,
-          ...(modelName.includes("gpt-5")
+          ...(isModelReasoningCapable
             ? {
                 max_completion_tokens:
                   defaultConfig.maxTokens ?? baseConfig.maxTokens,
@@ -338,16 +344,18 @@ export class ModelManager {
         (!selectedModelConfig ||
           fallbackModel.modelName !== selectedModelConfig.modelName)
       ) {
-        // Check if fallback model is a thinking model
+        // Check if fallback model is a thinking/reasoning model
         const isThinkingModel =
           (provider === "openai" && fallbackModel.modelName.startsWith("o")) ||
           fallbackModel.modelName.includes("extended-thinking");
+        const isFallbackReasoningCapable =
+          fallbackModel.modelName.includes("gpt-5") || /^o[1-9]/.test(fallbackModel.modelName);
 
         const fallbackConfig = {
           ...fallbackModel,
           reasoningEffort: baseConfig.reasoningEffort,
           reasoningTokens: baseConfig.reasoningTokens,
-          ...(fallbackModel.modelName.includes("gpt-5")
+          ...(isFallbackReasoningCapable
             ? {
                 max_completion_tokens: baseConfig.maxTokens,
                 temperature: 1,
@@ -496,12 +504,14 @@ export class ModelManager {
     const thinkingBudgetTokens = THINKING_BUDGET_TOKENS;
 
     const provider = modelProvider as Provider;
-    const isAzureGpt5 = provider === "azure-openai" && modelName.includes("gpt-5");
+    const isOSeriesModel = /^o[1-9]/.test(modelName);
+    const isReasoningCapable = modelName.includes("gpt-5") || isOSeriesModel;
+    const isAzureReasoningModel = provider === "azure-openai" && isReasoningCapable;
 
     return {
       modelName,
       provider,
-      ...(modelName.includes("gpt-5")
+      ...(isReasoningCapable
         ? {
             max_completion_tokens:
               (config.configurable?.maxTokens as number | undefined) ?? 10_000,
@@ -512,8 +522,8 @@ export class ModelManager {
               (config.configurable?.maxTokens as number | undefined) ?? 10_000,
             temperature: taskConfig.temperature as number,
           }),
-      reasoningEffort: isAzureGpt5 ? "high" : taskConfig.reasoningEffort,
-      reasoningTokens: isAzureGpt5
+      reasoningEffort: isAzureReasoningModel ? "high" : taskConfig.reasoningEffort,
+      reasoningTokens: isAzureReasoningModel
         ? GPT5_MAX_REASONING_TOKENS
         : taskConfig.reasoningTokens,
       thinkingModel,
@@ -563,15 +573,17 @@ export class ModelManager {
     if (!modelName) {
       return null;
     }
-    const isAzureGpt5 = provider === "azure-openai" && modelName.includes("gpt-5");
+    const isOSeriesModel = /^o[1-9]/.test(modelName);
+    const isReasoningCapable = modelName.includes("gpt-5") || isOSeriesModel;
+    const isAzureReasoningModel = provider === "azure-openai" && isReasoningCapable;
 
     return {
       provider,
       modelName,
-      reasoningEffort: isAzureGpt5
+      reasoningEffort: isAzureReasoningModel
         ? "high"
         : TASK_TO_CONFIG_DEFAULTS_MAP[task].reasoningEffort,
-      reasoningTokens: isAzureGpt5
+      reasoningTokens: isAzureReasoningModel
         ? GPT5_MAX_REASONING_TOKENS
         : TASK_TO_CONFIG_DEFAULTS_MAP[task].reasoningTokens,
     };

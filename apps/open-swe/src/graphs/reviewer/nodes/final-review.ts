@@ -64,11 +64,22 @@ Here are all of the notes you wrote to your scratchpad during the review:
 </context>
 
 <review-guidelines>
-If you determine that the task is not completed, keep the following in mind when generating your review:
-- Formatting/linting scripts should always be executed last, since any changes made after them could cause the codebase to no longer be properly formatted/linted.
+IMPORTANT: Lean toward marking tasks as COMPLETE. Only mark as incomplete if there are critical functional issues.
 
-Carefully read over all of the provided context above, and if you determine that the task has NOT been completed, call the \`{NOT_COMPLETE_TOOL_NAME}\` tool.
-Otherwise, if you determine that the task has been successfully completed, call the \`{COMPLETE_TOOL_NAME}\` tool.
+When evaluating completion:
+- Focus on whether the core functionality requested by the user has been implemented
+- Accept reasonable implementations even if they differ from the exact plan
+- Do NOT require perfection - working code that meets requirements is sufficient
+- Minor style issues, missing comments, or optimization opportunities are NOT reasons to mark incomplete
+- If tests pass and the feature works as intended, the task is likely complete
+
+If you determine that the task is not completed:
+- Only list CRITICAL missing items (max 5 actions)
+- Formatting/linting scripts should always be executed last
+- Focus on functional requirements, not stylistic preferences
+
+Carefully read over all of the provided context above. If the core requirements are met, call the \`{COMPLETE_TOOL_NAME}\` tool.
+Only call \`{NOT_COMPLETE_TOOL_NAME}\` if there are critical functional gaps that prevent the feature from working as intended.
 </review-guidelines>`;
 
 const getScratchpadNotesString = (messages: BaseMessage[]) => {

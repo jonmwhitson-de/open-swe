@@ -53,8 +53,8 @@ export const TASK_TO_CONFIG_DEFAULTS_MAP: Record<
   [LLMTask.REVIEWER]: {
     modelName: "anthropic:claude-sonnet-4-0",
     temperature: 0,
-    reasoningEffort: "medium" as ReasoningEffort,
-    reasoningTokens: 4_000,
+    reasoningEffort: "high" as ReasoningEffort,
+    reasoningTokens: 8_000,
   },
   [LLMTask.ROUTER]: {
     modelName: "anthropic:claude-3-5-haiku-latest",
