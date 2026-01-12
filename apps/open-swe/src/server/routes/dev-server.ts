@@ -249,15 +249,15 @@ async function handleProxyRequest(
 
       // Rewrite absolute URLs to localhost to go through proxy
       html = html.replace(
-        new RegExp(`(src|href|action)=["']http://localhost:${port}/`, "gi"),
-        `$1="/dev-server/proxy/${port}/`,
+        new RegExp(`(src|href|action)=(["'])http://localhost:${port}/([^"']*)(\\2)`, "gi"),
+        `$1=$2/dev-server/proxy/${port}/$3$4`,
       );
 
       // Rewrite absolute paths starting with / to go through proxy
-      // Match various attributes that can contain URLs
+      // Match various attributes that can contain URLs, preserving the quote character
       html = html.replace(
-        new RegExp(`(src|href|action|data|poster|srcset)=["']/(?!dev-server/proxy)([^"']*)["']`, "gi"),
-        `$1="/dev-server/proxy/${port}/$2"`,
+        new RegExp(`(src|href|action|data|poster|srcset)=(["'])/(?!dev-server/proxy|api/preview)([^"']*)(\\2)`, "gi"),
+        `$1=$2/dev-server/proxy/${port}/$3$4`,
       );
 
       return new Response(html, {
