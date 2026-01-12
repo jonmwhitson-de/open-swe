@@ -11,9 +11,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     process.env.NEXT_PUBLIC_API_URL ??
     "http://localhost:2024";
 
+  let body: unknown;
   try {
-    const body = await request.json();
+    body = await request.json();
+  } catch (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Invalid request body",
+        error: error instanceof Error ? error.message : "Failed to parse JSON",
+      },
+      { status: 400 },
+    );
+  }
 
+  try {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
@@ -28,14 +40,40 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       body: JSON.stringify(body),
     });
 
-    const result = await response.json();
+    // Try to parse response as JSON
+    let result: unknown;
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      result = await response.json();
+    } else {
+      const text = await response.text();
+      result = {
+        success: false,
+        message: "Backend returned non-JSON response",
+        error: text.substring(0, 500),
+      };
+    }
 
     return NextResponse.json(result, { status: response.status });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to start dev server";
+
+    // Provide more helpful error for connection issues
+    let helpfulMessage = message;
+    if (message.includes("ECONNREFUSED")) {
+      helpfulMessage = `Cannot connect to backend at ${backendUrl}. Is the backend server running?`;
+    } else if (message.includes("fetch failed")) {
+      helpfulMessage = `Network error connecting to backend at ${backendUrl}. ${message}`;
+    }
+
     return NextResponse.json(
-      { success: false, message, error: message },
+      {
+        success: false,
+        message: "Failed to connect to backend",
+        error: helpfulMessage,
+        backendUrl,
+      },
       { status: 500 },
     );
   }

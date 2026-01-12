@@ -131,6 +131,12 @@ export function PreviewTab({
       selectedPreset === "custom" ? customCommand : selectedPreset;
     const port = customPort ? parseInt(customPort, 10) : 3000;
 
+    console.log("[Preview] Starting server...", {
+      command,
+      port,
+      sandboxSessionId,
+    });
+
     try {
       const response = await fetch("/api/preview/start-server", {
         method: "POST",
@@ -144,9 +150,13 @@ export function PreviewTab({
         }),
       });
 
+      console.log("[Preview] Response status:", response.status);
+
       const result: StartServerResponse = await response.json();
+      console.log("[Preview] Response body:", result);
 
       if (result.success) {
+        console.log("[Preview] Server started successfully on port:", result.port);
         setServerMessage(result.message);
         if (result.port) {
           setServerStartedPort(result.port);
@@ -160,9 +170,11 @@ export function PreviewTab({
           setIframeError(false);
         }, 1000);
       } else {
+        console.error("[Preview] Server start failed:", result);
         setServerError(result.error || result.message);
       }
     } catch (error) {
+      console.error("[Preview] Error starting server:", error);
       setServerError(
         error instanceof Error ? error.message : "Failed to start server",
       );
@@ -176,6 +188,8 @@ export function PreviewTab({
     setServerError("");
     setServerMessage("");
 
+    console.log("[Preview] Stopping server...", { sandboxSessionId });
+
     try {
       const response = await fetch("/api/preview/stop-server", {
         method: "POST",
@@ -187,15 +201,21 @@ export function PreviewTab({
         }),
       });
 
+      console.log("[Preview] Stop response status:", response.status);
+
       const result = await response.json();
+      console.log("[Preview] Stop response body:", result);
 
       if (result.success) {
+        console.log("[Preview] Server stopped successfully");
         setServerMessage("Server stopped");
         setServerStartedPort(null);
       } else {
+        console.error("[Preview] Server stop failed:", result);
         setServerError(result.error || result.message);
       }
     } catch (error) {
+      console.error("[Preview] Error stopping server:", error);
       setServerError(
         error instanceof Error ? error.message : "Failed to stop server",
       );
