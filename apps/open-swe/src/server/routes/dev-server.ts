@@ -234,17 +234,77 @@ async function handleProxyRequest(
       // This is critical for assets, scripts, stylesheets, etc.
       const baseTag = `<base href="/dev-server/proxy/${port}/">`;
 
-      // Insert base tag right after <head> if present
+      // Inject a script that intercepts dynamic resource loading
+      // This catches JavaScript-initiated requests that bypass HTML rewriting
+      const interceptScript = `<script>
+(function() {
+  var proxyBase = '/dev-server/proxy/${port}';
+
+  // Intercept dynamic script/link/img creation
+  var origCreateElement = document.createElement.bind(document);
+  document.createElement = function(tag) {
+    var el = origCreateElement(tag);
+    var tagLower = tag.toLowerCase();
+    if (tagLower === 'script' || tagLower === 'link' || tagLower === 'img') {
+      var origSetAttribute = el.setAttribute.bind(el);
+      el.setAttribute = function(name, value) {
+        if ((name === 'src' || name === 'href') && typeof value === 'string' && value.startsWith('/') && !value.startsWith(proxyBase)) {
+          value = proxyBase + value;
+        }
+        return origSetAttribute(name, value);
+      };
+      // Also intercept direct property assignment
+      var descriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src') ||
+                       Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src') ||
+                       Object.getOwnPropertyDescriptor(HTMLLinkElement.prototype, 'href');
+      if (descriptor && descriptor.set) {
+        var origSetter = descriptor.set;
+        Object.defineProperty(el, tagLower === 'link' ? 'href' : 'src', {
+          set: function(value) {
+            if (typeof value === 'string' && value.startsWith('/') && !value.startsWith(proxyBase)) {
+              value = proxyBase + value;
+            }
+            origSetter.call(this, value);
+          },
+          get: descriptor.get
+        });
+      }
+    }
+    return el;
+  };
+
+  // Intercept fetch requests
+  var origFetch = window.fetch;
+  window.fetch = function(url, options) {
+    if (typeof url === 'string' && url.startsWith('/') && !url.startsWith(proxyBase)) {
+      url = proxyBase + url;
+    }
+    return origFetch.call(this, url, options);
+  };
+
+  // Intercept XHR
+  var origOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(method, url) {
+    if (typeof url === 'string' && url.startsWith('/') && !url.startsWith(proxyBase)) {
+      url = proxyBase + url;
+    }
+    return origOpen.apply(this, [method, url].concat(Array.prototype.slice.call(arguments, 2)));
+  };
+})();
+</script>`;
+
+      // Insert base tag and intercept script right after <head> if present
+      const headInsert = baseTag + interceptScript;
       if (html.includes("<head>")) {
-        html = html.replace("<head>", `<head>${baseTag}`);
+        html = html.replace("<head>", `<head>${headInsert}`);
       } else if (html.includes("<head ")) {
-        html = html.replace(/<head([^>]*)>/, `<head$1>${baseTag}`);
+        html = html.replace(/<head([^>]*)>/, `<head$1>${headInsert}`);
       } else if (html.includes("<HEAD>")) {
-        html = html.replace("<HEAD>", `<HEAD>${baseTag}`);
+        html = html.replace("<HEAD>", `<HEAD>${headInsert}`);
       } else if (html.includes("<html")) {
-        html = html.replace(/<html([^>]*)>/, `<html$1><head>${baseTag}</head>`);
+        html = html.replace(/<html([^>]*)>/, `<html$1><head>${headInsert}</head>`);
       } else {
-        html = `<head>${baseTag}</head>${html}`;
+        html = `<head>${headInsert}</head>${html}`;
       }
 
       // Rewrite absolute URLs to localhost to go through proxy

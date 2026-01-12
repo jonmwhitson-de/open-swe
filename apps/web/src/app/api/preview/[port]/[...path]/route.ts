@@ -160,25 +160,11 @@ async function handleRequest(
       // For HTML responses, rewrite backend proxy URLs to frontend proxy URLs
       let html = await response.text();
 
-      // Replace backend base tag with frontend base tag
-      // The backend injects: <base href="/dev-server/proxy/{port}/">
-      // We need to replace it with: <base href="/api/preview/{port}/">
+      // Replace ALL occurrences of /dev-server/proxy/<port> with /api/preview/<port>
+      // This catches URLs in attributes, inline scripts, base tags, etc.
       html = html.replace(
-        /<base\s+href=["']\/dev-server\/proxy\/(\d+)\/["']\s*\/?>/gi,
-        `<base href="/api/preview/$1/">`,
-      );
-
-      // Rewrite all /dev-server/proxy/<port>/... URLs to /api/preview/<port>/...
-      // This catches URLs in attributes, inline scripts, etc.
-      html = html.replace(
-        /\/dev-server\/proxy\/(\d+)\//g,
-        "/api/preview/$1/",
-      );
-
-      // Also handle /dev-server/proxy/<port>" (without trailing slash, at end of attribute)
-      html = html.replace(
-        /\/dev-server\/proxy\/(\d+)"/g,
-        '/api/preview/$1/"',
+        /\/dev-server\/proxy\/(\d+)/g,
+        "/api/preview/$1",
       );
 
       return new NextResponse(html, {
