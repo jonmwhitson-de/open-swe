@@ -165,6 +165,28 @@ async function handleRequest(
         "/api/preview/$1/",
       );
 
+      // Inject a <base> tag to ensure all relative URLs resolve through the proxy
+      // This is critical for assets like /assets/main.js to load as /api/preview/<port>/assets/main.js
+      const baseTag = `<base href="/api/preview/${port}/">`;
+
+      // Insert base tag right after <head> if present
+      if (html.includes("<head>")) {
+        html = html.replace("<head>", `<head>${baseTag}`);
+      } else if (html.includes("<head ")) {
+        // Handle <head with attributes
+        html = html.replace(/<head([^>]*)>/, `<head$1>${baseTag}`);
+      } else if (html.includes("<HEAD>")) {
+        html = html.replace("<HEAD>", `<HEAD>${baseTag}`);
+      } else {
+        // If no head tag, try to insert at the start of html tag or at beginning
+        if (html.includes("<html")) {
+          html = html.replace(/<html([^>]*)>/, `<html$1><head>${baseTag}</head>`);
+        } else {
+          // Prepend to document
+          html = `<head>${baseTag}</head>${html}`;
+        }
+      }
+
       return new NextResponse(html, {
         status: response.status,
         statusText: response.statusText,
