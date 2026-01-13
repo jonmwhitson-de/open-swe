@@ -307,17 +307,16 @@ async function handleProxyRequest(
         html = `<head>${headInsert}</head>${html}`;
       }
 
-      // Rewrite absolute URLs to localhost to go through proxy
-      html = html.replace(
-        new RegExp(`(src|href|action)=(["'])http://localhost:${port}/([^"']*)(\\2)`, "gi"),
-        `$1=$2/dev-server/proxy/${port}/$3$4`,
-      );
+      // Rewrite ALL absolute paths starting with / to go through proxy
+      // Simple approach: replace common patterns that indicate absolute URLs
+      // This catches "/_next/", "/_app/", "/static/", etc.
+      html = html.replace(/"\/(?!dev-server\/proxy|api\/preview|http)/g, `"/dev-server/proxy/${port}/`);
+      html = html.replace(/'\/(?!dev-server\/proxy|api\/preview|http)/g, `'/dev-server/proxy/${port}/`);
 
-      // Rewrite absolute paths starting with / to go through proxy
-      // Match various attributes that can contain URLs, preserving the quote character
+      // Also rewrite http://localhost URLs
       html = html.replace(
-        new RegExp(`(src|href|action|data|poster|srcset)=(["'])/(?!dev-server/proxy|api/preview)([^"']*)(\\2)`, "gi"),
-        `$1=$2/dev-server/proxy/${port}/$3$4`,
+        new RegExp(`http://localhost:${port}/`, "gi"),
+        `/dev-server/proxy/${port}/`,
       );
 
       return new Response(html, {
