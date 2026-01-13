@@ -2,7 +2,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { createLogger, LogLevel } from "../../utils/logger.js";
 import { createShellExecutor, isShellAvailable, findAvailableShell, resetShellCache } from "../../utils/shell-executor/index.js";
-import { getSandboxMetadata } from "../../utils/sandbox.js";
+import { getSandboxMetadata, getPortMappingsFromDocker } from "../../utils/sandbox.js";
 import {
   detectDevServer,
   isServerStarted,
@@ -150,17 +150,34 @@ async function handleProxyRequest(
   let targetPort = port;
 
   if (sandboxSessionId) {
-    const metadata = getSandboxMetadata(sandboxSessionId);
-    if (metadata?.portMappings) {
-      const mapping = metadata.portMappings.find((m) => m.containerPort === port);
+    // First try in-memory metadata
+    let portMappings = getSandboxMetadata(sandboxSessionId)?.portMappings;
+
+    // If not found in memory, try querying Docker directly
+    // This handles cases where the backend restarted but the container is still running
+    if (!portMappings) {
+      logger.info("Sandbox metadata not in memory, querying Docker", { sandboxSessionId });
+      portMappings = await getPortMappingsFromDocker(sandboxSessionId);
+    }
+
+    if (portMappings) {
+      const mapping = portMappings.find((m) => m.containerPort === port);
       if (mapping) {
         targetPort = mapping.hostPort;
-        logger.debug("Using port mapping for proxy", {
+        logger.info("Using port mapping for proxy", {
           sandboxSessionId,
           containerPort: port,
           hostPort: targetPort,
         });
+      } else {
+        logger.warn("No port mapping found for container port", {
+          sandboxSessionId,
+          containerPort: port,
+          availableMappings: portMappings.map((m) => `${m.containerPort}->${m.hostPort}`),
+        });
       }
+    } else {
+      logger.warn("No port mappings found for sandbox", { sandboxSessionId });
     }
   } else if (isLocalModeFromEnv()) {
     // In local mode without sandboxSessionId, use port as-is (direct localhost access)
