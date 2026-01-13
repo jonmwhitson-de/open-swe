@@ -77,10 +77,16 @@ async function handleRequest(
   const backendUrl = getBackendUrl();
   const targetUrl = new URL(`${backendUrl}/dev-server/proxy/${port}/${path}`);
 
-  // Copy query parameters
+  // Copy query parameters (including sandboxSessionId for port mapping lookup)
   request.nextUrl.searchParams.forEach((value, key) => {
     targetUrl.searchParams.append(key, value);
   });
+
+  // Ensure sandboxSessionId is passed through for port mapping
+  const sandboxSessionId = request.nextUrl.searchParams.get("sandboxSessionId");
+  if (sandboxSessionId && !targetUrl.searchParams.has("sandboxSessionId")) {
+    targetUrl.searchParams.set("sandboxSessionId", sandboxSessionId);
+  }
 
   try {
     // Build headers to forward

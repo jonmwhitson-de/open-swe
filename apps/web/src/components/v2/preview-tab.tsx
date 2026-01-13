@@ -98,11 +98,15 @@ export function PreviewTab({
     if (!activePort || isNaN(activePort)) {
       return { proxy: null, direct: null };
     }
+    // Include sandboxSessionId for proper port mapping in sandbox mode
+    const queryParams = sandboxSessionId
+      ? `?sandboxSessionId=${encodeURIComponent(sandboxSessionId)}`
+      : "";
     return {
-      proxy: `/api/preview/${activePort}`,
+      proxy: `/api/preview/${activePort}${queryParams}`,
       direct: `http://localhost:${activePort}`,
     };
-  }, [activePort]);
+  }, [activePort, sandboxSessionId]);
 
   const previewUrl = useProxy ? urls.proxy : urls.direct;
 
