@@ -138,13 +138,37 @@ async function handleProxyRequest(
 ): Promise<Response> {
   const portStr = ctx.req.param("port");
   const port = parseInt(portStr, 10);
+  const sandboxSessionId = ctx.req.query("sandboxSessionId");
 
   if (isNaN(port) || port < 1 || port > 65535) {
     return ctx.json({ error: "Invalid port number" }, 400);
   }
 
+  // Determine the actual target port
+  // If we have a sandboxSessionId, look up the host port from port mappings
+  // The port parameter represents the container port, we need to find the host port
+  let targetPort = port;
+
+  if (sandboxSessionId) {
+    const metadata = getSandboxMetadata(sandboxSessionId);
+    if (metadata?.portMappings) {
+      const mapping = metadata.portMappings.find((m) => m.containerPort === port);
+      if (mapping) {
+        targetPort = mapping.hostPort;
+        logger.debug("Using port mapping for proxy", {
+          sandboxSessionId,
+          containerPort: port,
+          hostPort: targetPort,
+        });
+      }
+    }
+  } else if (isLocalModeFromEnv()) {
+    // In local mode without sandboxSessionId, use port as-is (direct localhost access)
+    targetPort = port;
+  }
+
   // Construct the target URL
-  const targetUrl = new URL(`http://localhost:${port}/${path}`);
+  const targetUrl = new URL(`http://localhost:${targetPort}/${path}`);
 
   // Copy query parameters
   const url = new URL(ctx.req.url);
@@ -234,11 +258,23 @@ async function handleProxyRequest(
       // This is critical for assets, scripts, stylesheets, etc.
       const baseTag = `<base href="/dev-server/proxy/${port}/">`;
 
+      // Get sandboxSessionId from query params for port mapping
+      const url = new URL(ctx.req.url);
+      const sandboxSessionId = url.searchParams.get("sandboxSessionId") || "";
+      const sandboxParam = sandboxSessionId ? `?sandboxSessionId=${encodeURIComponent(sandboxSessionId)}` : "";
+
       // Inject a script that intercepts dynamic resource loading
       // This catches JavaScript-initiated requests that bypass HTML rewriting
       const interceptScript = `<script>
 (function() {
   var proxyBase = '/dev-server/proxy/${port}';
+  var sandboxParam = '${sandboxParam}';
+
+  function addSandboxParam(url) {
+    if (!sandboxParam) return url;
+    var separator = url.includes('?') ? '&' : '?';
+    return url + separator + sandboxParam.substring(1);
+  }
 
   // Intercept dynamic script/link/img creation
   var origCreateElement = document.createElement.bind(document);
@@ -249,7 +285,7 @@ async function handleProxyRequest(
       var origSetAttribute = el.setAttribute.bind(el);
       el.setAttribute = function(name, value) {
         if ((name === 'src' || name === 'href') && typeof value === 'string' && value.startsWith('/') && !value.startsWith(proxyBase)) {
-          value = proxyBase + value;
+          value = addSandboxParam(proxyBase + value);
         }
         return origSetAttribute(name, value);
       };
@@ -262,7 +298,7 @@ async function handleProxyRequest(
         Object.defineProperty(el, tagLower === 'link' ? 'href' : 'src', {
           set: function(value) {
             if (typeof value === 'string' && value.startsWith('/') && !value.startsWith(proxyBase)) {
-              value = proxyBase + value;
+              value = addSandboxParam(proxyBase + value);
             }
             origSetter.call(this, value);
           },
@@ -277,7 +313,7 @@ async function handleProxyRequest(
   var origFetch = window.fetch;
   window.fetch = function(url, options) {
     if (typeof url === 'string' && url.startsWith('/') && !url.startsWith(proxyBase)) {
-      url = proxyBase + url;
+      url = addSandboxParam(proxyBase + url);
     }
     return origFetch.call(this, url, options);
   };
@@ -286,7 +322,7 @@ async function handleProxyRequest(
   var origOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function(method, url) {
     if (typeof url === 'string' && url.startsWith('/') && !url.startsWith(proxyBase)) {
-      url = proxyBase + url;
+      url = addSandboxParam(proxyBase + url);
     }
     return origOpen.apply(this, [method, url].concat(Array.prototype.slice.call(arguments, 2)));
   };
