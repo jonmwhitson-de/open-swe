@@ -339,6 +339,58 @@ export function getHostPortForContainer(
   return mapping?.hostPort;
 }
 
+/**
+ * Query Docker directly to get port mappings for a container.
+ * This is useful when the in-memory sandbox metadata is lost (e.g., after backend restart).
+ * @param containerId - The Docker container ID or name
+ * @returns Promise resolving to port mappings, or undefined if container not found
+ */
+export async function getPortMappingsFromDocker(
+  containerId: string,
+): Promise<PortMapping[] | undefined> {
+  try {
+    const Docker = (await import("dockerode")).default;
+    const docker = new Docker();
+
+    const container = docker.getContainer(containerId);
+    const inspectData = await container.inspect();
+
+    if (!inspectData.NetworkSettings?.Ports) {
+      return undefined;
+    }
+
+    const mappings: PortMapping[] = [];
+    const ports = inspectData.NetworkSettings.Ports;
+
+    for (const [containerPortKey, hostBindings] of Object.entries(ports)) {
+      if (!hostBindings || hostBindings.length === 0) continue;
+
+      // containerPortKey is like "3000/tcp"
+      const containerPort = parseInt(containerPortKey.split("/")[0], 10);
+      if (isNaN(containerPort)) continue;
+
+      // Get the first host binding
+      const hostPort = parseInt(hostBindings[0].HostPort, 10);
+      if (isNaN(hostPort)) continue;
+
+      mappings.push({ containerPort, hostPort });
+    }
+
+    logger.info("Retrieved port mappings from Docker", {
+      containerId,
+      mappings: mappings.map((m) => `${m.containerPort}->${m.hostPort}`),
+    });
+
+    return mappings.length > 0 ? mappings : undefined;
+  } catch (error) {
+    logger.debug("Failed to get port mappings from Docker", {
+      containerId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
+}
+
 function resolveRepoName(hostRepoPath?: string, provided?: string): string {
   if (provided) return provided;
   if (hostRepoPath) {
