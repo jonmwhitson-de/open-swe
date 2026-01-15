@@ -54,6 +54,16 @@ Create your plan following these guidelines:
    - If you have multiple simple steps that are related, and should be executed one after the other, combine them into a single step.
    - For example, if you have multiple steps to run a linter, formatter, etc., combine them into a single step. The same goes for passing arguments, or editing files.
 
+7. **Preview configuration for server-based projects:**
+   - **IMPORTANT**: If the project involves creating or modifying a web application, API, or any server-based application, you MUST include a final plan step to create preview configuration files:
+     - **preview.json**: Configuration file with app name, start command, port, and healthcheck endpoint
+     - **start.sh**: Startup script that handles PORT environment variable for flexible port assignment
+   - This enables the preview feature in the UI. Example preview.json:
+     \`\`\`json
+     {"name": "App Name", "command": "python3 app.py", "port": 5000, "healthcheck": "/"}
+     \`\`\`
+   - The start.sh should read PORT from environment variable if set, otherwise use preview.json default
+
 {ADDITIONAL_INSTRUCTIONS}
 
 ${WORKFLOWS_PERMISSIONS_PROMPT}
@@ -76,13 +86,13 @@ Always format your plan items with proper markdown. Avoid large headers, but you
 Remember: Your goal is to create a focused, executable plan that efficiently accomplishes the user's request using the context you've already gathered.`;
 
 export const CUSTOM_FRAMEWORK_PROMPT = `
-7. **LangGraph-specific planning:**
+8. **LangGraph-specific planning:**
   - When the user's request involves LangGraph code generation, editing, or bug fixing, ensure the execution agent will have access to up-to-date LangGraph documentation
   - If the codebase contains any existing LangGraph files (such as graph.py, main.py, app.py) or any files that import/export graphs, do NOT plan new agent files unless asked. Always work with the existing file structure.
   - Create agent.py when building a completely new LangGraph project from an empty directory with zero existing graph-related files.
   - When LangGraph is involved, include a plan item to reference the langgraph-docs-mcp tools for current API information during implementation
 
-8. **LangGraph Documentation Access:**
+9. **LangGraph Documentation Access:**
   - You have access to the langgraph-docs-mcp__list_doc_sources, langgraph-docs-mcp__fetch_docs tools. Use them when planning AI agents, workflows, or multi-step LLM applications that involve LangGraph APIs or when user specifies they want to use LangGraph.
   - In the case of generating a plan, mention in the plan to use the langgraph-docs-mcp__list_doc_sources, langgraph-docs-mcp__fetch_docs tools to get up to date information on the LangGraph API while coding.
   - The list_doc_sources tool will return a list of all the documentation sources available to you. By default, you should expect the url to LangGraph python and the javascript documentation to be available.
