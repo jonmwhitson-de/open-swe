@@ -70,6 +70,54 @@ const CODING_STANDARDS_PROMPT = `<coding_standards>
     - ${WORKFLOWS_PERMISSIONS_PROMPT}
 </coding_standards>`;
 
+const PREVIEW_CONFIGURATION_PROMPT = `<preview_configuration>
+    **IMPORTANT**: When completing a task that involves creating or modifying a web application, API, or any server-based project, you MUST create the following files in the project root to enable the preview feature:
+
+    1. **preview.json** - Configuration file for the preview system:
+    \`\`\`json
+    {
+      "name": "Your App Name",
+      "command": "python3 app.py",
+      "port": 5000,
+      "healthcheck": "/"
+    }
+    \`\`\`
+    - \`name\`: A human-readable name for the application
+    - \`command\`: The command to start the server (e.g., "python3 app.py", "npm start", "node server.js")
+    - \`port\`: The port the server will listen on (will be overridden by PORT env var if set)
+    - \`healthcheck\`: The endpoint to check if the server is running (usually "/" or "/health")
+
+    2. **start.sh** - A startup script that handles port configuration:
+    \`\`\`bash
+    #!/bin/bash
+    set -e
+
+    # Use PORT env var if set, otherwise read from preview.json
+    if [ -n "$PORT" ]; then
+      echo "Using PORT from environment: $PORT"
+    else
+      if [ -f preview.json ]; then
+        PORT=$(python3 -c "import json; print(json.load(open('preview.json'))['port'])")
+        echo "Using PORT from preview.json: $PORT"
+      else
+        PORT=5000
+        echo "Using default PORT: $PORT"
+      fi
+    fi
+
+    export PORT
+    echo "Starting server on port $PORT..."
+    # Add your server start command here, using $PORT
+    \`\`\`
+
+    **Examples by framework:**
+    - Python/Flask: \`flask run --port $PORT\` or \`python3 app.py\` (read PORT from env in code)
+    - Node.js: \`PORT=$PORT node server.js\` or \`npm start\`
+    - Python/FastAPI: \`uvicorn main:app --port $PORT\`
+
+    **ALWAYS create these files** when the task involves any server-based application, even if the user doesn't explicitly ask for them. This enables seamless preview functionality in the UI.
+</preview_configuration>`;
+
 const COMMUNICATION_GUIDELINES_PROMPT = `<communication_guidelines>
     - For coding tasks: Focus on implementation and provide brief summaries
     - When generating text which will be shown to the user, ensure you always use markdown formatting to make the text easy to read and understand.
@@ -196,6 +244,8 @@ ${CORE_BEHAVIOR_PROMPT}
 
     ${CODING_STANDARDS_PROMPT}
 
+    ${PREVIEW_CONFIGURATION_PROMPT}
+
     {CUSTOM_FRAMEWORK_PROMPT}
 
     ${COMMUNICATION_GUIDELINES_PROMPT}
@@ -222,6 +272,8 @@ ${CORE_BEHAVIOR_PROMPT}
     ${TOOL_USE_BEST_PRACTICES_PROMPT}
 
     ${CODING_STANDARDS_PROMPT}
+
+    ${PREVIEW_CONFIGURATION_PROMPT}
 
     {CUSTOM_FRAMEWORK_PROMPT}
 
