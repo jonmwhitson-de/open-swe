@@ -363,8 +363,10 @@ export class LocalDockerSandboxProvider implements SandboxProvider {
     const workingDir = cwd ?? this.options.workingDirectory ?? DEFAULT_WORKING_DIR;
     const formattedEnv = env ? Object.entries(env).map(([key, value]) => `${key}=${value}`) : undefined;
 
+    // Note: Using -c instead of -lc to avoid slow login shell initialization
+    // Login shells load .profile/.bashrc which can have slow initializations (nvm, pyenv, etc.)
     const exec = await container.exec({
-      Cmd: ["/bin/sh", "-lc", command],
+      Cmd: ["/bin/sh", "-c", command],
       WorkingDir: workingDir,
       Env: formattedEnv,
       AttachStdout: true,
