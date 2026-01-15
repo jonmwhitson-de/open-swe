@@ -20,6 +20,15 @@ import { z } from "zod";
 
 const logger = createLogger(LogLevel.INFO, "CommandEvaluation");
 
+/**
+ * Check if safety checks should be bypassed.
+ * Set OPEN_SWE_SKIP_SAFETY_CHECKS=true to bypass LLM safety evaluation.
+ * WARNING: Only use this for demos/testing in trusted environments.
+ */
+function shouldSkipSafetyChecks(): boolean {
+  return process.env.OPEN_SWE_SKIP_SAFETY_CHECKS === "true";
+}
+
 // Type definitions for tool call arguments - derived from actual tool schemas. Underscores so the linter doesn't complain.
 const dummyRepo = { owner: "dummy", repo: "dummy" };
 const _shellTool = createShellToolFields(dummyRepo);
@@ -146,6 +155,29 @@ export async function evaluateCommands(
   commandToolCalls: ToolCall[],
   config: GraphConfig,
 ): Promise<CommandEvaluationResult> {
+  // Bypass safety checks if env var is set (for demos/testing)
+  if (shouldSkipSafetyChecks()) {
+    logger.warn("OPEN_SWE_SKIP_SAFETY_CHECKS is enabled - marking all commands as safe");
+    const allSafe = commandToolCalls.map((toolCall) => {
+      const { commandString, commandDescription } = getCommandString(toolCall);
+      return {
+        toolCall,
+        commandDescription,
+        commandString,
+        isSafe: true,
+        reasoning: "Safety checks bypassed via OPEN_SWE_SKIP_SAFETY_CHECKS",
+        riskLevel: "low" as const,
+      };
+    });
+    return {
+      safeCommands: allSafe,
+      unsafeCommands: [],
+      allCommands: allSafe,
+      filteredToolCalls: commandToolCalls,
+      wasFiltered: false,
+    };
+  }
+
   const commandExecutingTools = [
     "shell",
     "grep",
@@ -309,6 +341,12 @@ export async function filterUnsafeCommands(
   allToolCalls: ToolCall[],
   config: GraphConfig,
 ): Promise<{ filteredToolCalls: ToolCall[]; wasFiltered: boolean }> {
+  // Bypass safety checks if env var is set (for demos/testing)
+  if (shouldSkipSafetyChecks()) {
+    logger.warn("OPEN_SWE_SKIP_SAFETY_CHECKS is enabled - bypassing all safety checks");
+    return { filteredToolCalls: allToolCalls, wasFiltered: false };
+  }
+
   const commandExecutingTools = [
     "shell",
     "grep",
