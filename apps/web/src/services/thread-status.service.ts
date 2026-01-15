@@ -419,12 +419,6 @@ async function performFullStatusCheck(
           runId: plannerSession.runId,
           threadId: plannerSession.threadId,
           graph: "planner",
-          plannerStatus: {
-            graph: "planner",
-            runId: plannerSession.runId,
-            threadId: plannerSession.threadId,
-            status: "running",
-          },
         };
       }
       throw err;
@@ -438,12 +432,6 @@ async function performFullStatusCheck(
       runId: plannerSession.runId,
       threadId: plannerSession.threadId,
       graph: "planner",
-      plannerStatus: {
-        graph: "planner",
-        runId: plannerSession.runId,
-        threadId: plannerSession.threadId,
-        status: "running",
-      },
     };
   }
 
