@@ -8,6 +8,8 @@ import { useQueryState } from "nuqs";
 import { constructOpenInStudioURL } from "../utils";
 import { HumanInterrupt } from "@langchain/langgraph/prebuilt";
 import { useStream } from "@langchain/langgraph-sdk/react";
+import { useMemo } from "react";
+import { resolveApiUrl } from "@/providers/client";
 
 interface ThreadActionsViewProps {
   interrupt: HumanInterrupt;
@@ -85,7 +87,11 @@ export function ThreadActionsView({
     interrupt,
     stream,
   });
-  const apiUrl: string | undefined = process.env.NEXT_PUBLIC_API_URL ?? "";
+  // Resolve API URL to absolute URL (handles relative URLs like /api)
+  const apiUrl = useMemo(
+    () => resolveApiUrl(process.env.NEXT_PUBLIC_API_URL ?? "/api"),
+    [],
+  );
 
   const handleOpenInStudio = () => {
     if (!apiUrl) {

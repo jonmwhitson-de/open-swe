@@ -1,24 +1,98 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LOCAL_MODE_HEADER } from "@openswe/shared/constants";
+import { spawn } from "child_process";
+import { createServer } from "net";
+import path from "path";
+
+/**
+ * Check if a port is available
+ */
+async function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once("error", () => resolve(false));
+    server.once("listening", () => {
+      server.close();
+      resolve(true);
+    });
+    server.listen(port, "127.0.0.1");
+  });
+}
+
+/**
+ * Start the server locally (for local mode)
+ */
+async function startLocalServer(
+  command: string,
+  workspacePath: string,
+  port: number
+): Promise<{ success: boolean; message: string; error?: string; port?: number }> {
+  return new Promise((resolve) => {
+    console.log("[start-server] Starting local server:", { command, workspacePath, port });
+
+    const child = spawn("bash", ["-c", command], {
+      cwd: workspacePath,
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        PORT: String(port),
+        FLASK_RUN_PORT: String(port),
+      },
+    });
+
+    child.unref();
+
+    let output = "";
+    let errorOutput = "";
+
+    child.stdout?.on("data", (data) => {
+      output += data.toString();
+      console.log("[start-server] stdout:", data.toString());
+    });
+
+    child.stderr?.on("data", (data) => {
+      errorOutput += data.toString();
+      console.log("[start-server] stderr:", data.toString());
+    });
+
+    // Give the server some time to start
+    setTimeout(() => {
+      resolve({
+        success: true,
+        message: "Server starting...",
+        port,
+      });
+    }, 2000);
+
+    child.on("error", (err) => {
+      console.error("[start-server] Process error:", err);
+      resolve({
+        success: false,
+        message: "Failed to start server",
+        error: err.message,
+      });
+    });
+  });
+}
 
 /**
  * POST /api/preview/start-server
- * Proxies to the backend to start a dev server.
+ * Starts a dev server. In local mode, runs directly; otherwise proxies to backend.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const isLocalMode = process.env.OPEN_SWE_LOCAL_MODE === "true";
+  const localReposDir = process.env.OPEN_SWE_LOCAL_REPOS_DIR || "/tmp/open-swe-workspaces";
+
   const backendUrl =
     process.env.LANGGRAPH_API_URL ??
     process.env.NEXT_PUBLIC_API_URL ??
     "http://localhost:2024";
 
+  console.log("[start-server] Mode:", isLocalMode ? "local" : "backend");
   console.log("[start-server] Backend URL:", backendUrl);
-  console.log("[start-server] Environment:", {
-    LANGGRAPH_API_URL: process.env.LANGGRAPH_API_URL,
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-    OPEN_SWE_LOCAL_MODE: process.env.OPEN_SWE_LOCAL_MODE,
-  });
 
-  let body: unknown;
+  let body: { command?: string; port?: number; workspacePath?: string; sandboxSessionId?: string };
   try {
     body = await request.json();
     console.log("[start-server] Request body:", body);
@@ -32,6 +106,43 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       },
       { status: 400 },
     );
+  }
+
+  const { command = "./start.sh", port = 5000, workspacePath } = body;
+
+  // Check for port conflict first
+  const portAvailable = await isPortAvailable(port);
+  if (!portAvailable) {
+    console.log("[start-server] Port conflict detected:", port);
+    return NextResponse.json({
+      success: false,
+      message: `Port ${port} is already in use`,
+      portConflict: true,
+    });
+  }
+
+  // In local mode, run the server directly
+  if (isLocalMode) {
+    // Determine workspace path
+    let targetPath = workspacePath;
+    if (!targetPath) {
+      const { promises: fs } = await import("fs");
+      const entries = await fs.readdir(localReposDir).catch(() => []);
+      if (entries.length > 0) {
+        targetPath = path.join(localReposDir, entries[0]);
+      }
+    }
+
+    if (!targetPath) {
+      return NextResponse.json({
+        success: false,
+        message: "No workspace path available",
+        error: "Could not determine workspace path",
+      });
+    }
+
+    const result = await startLocalServer(command, targetPath, port);
+    return NextResponse.json(result);
   }
 
   try {

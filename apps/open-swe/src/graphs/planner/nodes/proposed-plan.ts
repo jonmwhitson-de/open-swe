@@ -108,6 +108,25 @@ async function startProgrammerRun(input: {
     runInput.workspacePath = workspacePath;
   }
 
+  // Explicitly create the programmer thread FIRST before creating the run
+  // This ensures the thread is registered in LangGraph's storage and can be queried
+  try {
+    await langGraphClient.threads.create({
+      threadId: programmerThreadId,
+      metadata: {
+        assistant_id: PROGRAMMER_GRAPH_ID,
+        graph_id: PROGRAMMER_GRAPH_ID,
+      },
+    });
+    logger.info("Created new programmer thread", { programmerThreadId });
+  } catch (err) {
+    logger.error("Failed to create programmer thread", {
+      programmerThreadId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
+
   const run = await langGraphClient.runs.create(
     programmerThreadId,
     PROGRAMMER_GRAPH_ID,
@@ -121,7 +140,6 @@ async function startProgrammerRun(input: {
           ...(isLocalMode(config) && { [LOCAL_MODE_HEADER]: "true" }),
         },
       },
-      ifNotExists: "create",
       streamResumable: true,
       streamSubgraphs: true,
       streamMode: OPEN_SWE_STREAM_MODE as StreamMode[],

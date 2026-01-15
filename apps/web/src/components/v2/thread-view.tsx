@@ -38,6 +38,7 @@ import {
 import { useThreadStatus } from "@/hooks/useThreadStatus";
 import { useLocalRepositories } from "@/hooks/useLocalRepositories";
 import { cn } from "@/lib/utils";
+import { resolveApiUrl } from "@/providers/client";
 
 import {
   StickyToBottomContent,
@@ -166,6 +167,12 @@ export function ThreadView({
 
   // Get local repositories for workspace path fallback
   const { repositories } = useLocalRepositories("");
+
+  // Resolve API URL to absolute URL (handles relative URLs like /api)
+  const resolvedApiUrl = useMemo(
+    () => resolveApiUrl(process.env.NEXT_PUBLIC_API_URL ?? "/api"),
+    [],
+  );
 
   const {
     status: realTimeStatus,
@@ -383,7 +390,7 @@ export function ThreadView({
   // This avoids issues with useStream not properly reinitializing when
   // threadId changes from undefined to a valid UUID
   const featureRunStream = useStream<PlannerGraphState>({
-    apiUrl: process.env.NEXT_PUBLIC_API_URL,
+    apiUrl: resolvedApiUrl,
     assistantId: PLANNER_GRAPH_ID,
     reconnectOnMount: true,
     threadId: featureRunStreamThreadId,
@@ -501,7 +508,7 @@ export function ThreadView({
 
 
   const plannerStream = useStream<PlannerGraphState>({
-    apiUrl: process.env.NEXT_PUBLIC_API_URL,
+    apiUrl: resolvedApiUrl,
     assistantId: PLANNER_GRAPH_ID,
     reconnectOnMount: true,
     threadId: plannerSession?.threadId,
@@ -528,7 +535,7 @@ export function ThreadView({
   }, [plannerSession]);
 
   const programmerStream = useStream<GraphState>({
-    apiUrl: process.env.NEXT_PUBLIC_API_URL,
+    apiUrl: resolvedApiUrl,
     assistantId: PROGRAMMER_GRAPH_ID,
     reconnectOnMount: true,
     threadId: programmerSession?.threadId,
@@ -1427,6 +1434,7 @@ export function ThreadView({
                   previewPort={programmerStream.values?.previewPort}
                   isLoading={programmerStream.isLoading}
                   sandboxSessionId={programmerStream.values?.sandboxSessionId}
+                  workspacePath={workspacePath}
                 />
               </TabsContent>
             </Tabs>

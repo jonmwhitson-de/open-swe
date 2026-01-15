@@ -1,7 +1,7 @@
 import { Client } from "@langchain/langgraph-sdk";
 import { MANAGER_GRAPH_ID } from "@openswe/shared/constants";
 import type { ManagerGraphState } from "@openswe/shared/open-swe/manager/types";
-import { createClient } from "@/providers/client";
+import { createClient, resolveApiUrl } from "@/providers/client";
 import {
   FeatureGraphFetchResult,
   mapFeatureGraphPayload,
@@ -206,9 +206,6 @@ export async function performFeatureProposalAction({
 }
 
 function getApiUrl(): string {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
-  if (!apiUrl) {
-    throw new Error("API URL not configured");
-  }
-  return apiUrl;
+  // Resolve API URL to absolute URL (handles relative URLs like /api)
+  return resolveApiUrl(process.env.NEXT_PUBLIC_API_URL ?? "/api");
 }

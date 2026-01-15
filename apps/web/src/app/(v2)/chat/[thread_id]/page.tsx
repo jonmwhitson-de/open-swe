@@ -10,8 +10,9 @@ import { MANAGER_GRAPH_ID, LOCAL_MODE_HEADER } from "@openswe/shared/constants";
 import { ManagerGraphState } from "@openswe/shared/open-swe/manager/types";
 import { useRouter } from "next/navigation";
 import * as React from "react";
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { Client, Thread } from "@langchain/langgraph-sdk";
+import { resolveApiUrl } from "@/providers/client";
 
 async function fetchInitialThread(
   client: Client<ManagerGraphState>,
@@ -46,8 +47,15 @@ export default function ThreadPage({
     useState<Thread<ManagerGraphState> | null>(null);
   const router = useRouter();
   const { thread_id } = use(params);
+
+  // Resolve API URL to absolute URL (handles relative URLs like /api)
+  const apiUrl = useMemo(
+    () => resolveApiUrl(process.env.NEXT_PUBLIC_API_URL ?? "/api"),
+    [],
+  );
+
   const stream = useStream<ManagerGraphState>({
-    apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "",
+    apiUrl,
     assistantId: MANAGER_GRAPH_ID,
     threadId: thread_id,
     reconnectOnMount: true,

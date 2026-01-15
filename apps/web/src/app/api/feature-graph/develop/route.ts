@@ -302,7 +302,39 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       thread_id: plannerThreadId,
     } satisfies Record<string, unknown>;
 
-    // Create a new planner run (always create new thread to avoid "thread busy")
+    // Explicitly create the thread FIRST before creating the run
+    // This ensures the thread is registered in LangGraph's storage and can be queried
+    try {
+      await client.threads.create({
+        threadId: plannerThreadId,
+        metadata: {
+          assistant_id: PLANNER_GRAPH_ID,
+          graph_id: PLANNER_GRAPH_ID,
+          feature_id: featureId,
+          // Include owner for auth filtering - must match the local-user identity
+          owner: "local-user",
+          installation_name: "local-mode",
+        },
+      });
+      // Verify the thread was created successfully by fetching it
+      // This helps catch race conditions with in-memory storage
+      try {
+        await client.threads.get(plannerThreadId);
+        console.log("[develop] Verified planner thread creation:", { plannerThreadId });
+      } catch (verifyErr) {
+        console.warn("[develop] Thread created but not immediately accessible, continuing...", { plannerThreadId });
+      }
+    } catch (err) {
+      // Thread creation errors should not be ignored - they indicate a fundamental issue
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error("[develop] Failed to create planner thread:", { plannerThreadId, error: err });
+      return NextResponse.json(
+        { error: `Failed to create planner thread: ${errMsg}` },
+        { status: 500 },
+      );
+    }
+
+    // Create a new planner run on the already-existing thread
     let run;
     try {
       run = await client.runs.create(plannerThreadId, PLANNER_GRAPH_ID, {
@@ -311,7 +343,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           recursion_limit: 400,
           configurable: plannerRunConfigurableBase,
         },
-        ifNotExists: "create",
         streamResumable: true,
         streamMode: OPEN_SWE_STREAM_MODE as StreamMode[],
       });

@@ -1,5 +1,5 @@
 import { Client, Thread } from "@langchain/langgraph-sdk";
-import { createClient } from "@/providers/client";
+import { createClient, resolveApiUrl } from "@/providers/client";
 import {
   ThreadUIStatus,
   ThreadStatusData,
@@ -152,11 +152,8 @@ export async function fetchThreadStatus(
   sessionCache?: SessionCache,
 ): Promise<ThreadStatusData> {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
-    if (!apiUrl) {
-      throw new Error("API URL not configured");
-    }
-
+    // Resolve API URL to absolute URL (handles relative URLs like /api)
+    const apiUrl = resolveApiUrl(process.env.NEXT_PUBLIC_API_URL ?? "/api");
     const client = createClient(apiUrl);
     const resolver = new StatusResolver();
 
@@ -392,21 +389,62 @@ async function performFullStatusCheck(
   const plannerSession = managerThread.values.plannerSession;
   const plannerCacheKey = `planner:${plannerSession.threadId}:${plannerSession.runId}`;
 
-  let plannerThread: Thread<PlannerGraphState>;
+  let plannerThread: Thread<PlannerGraphState> | null = null;
   const cachedPlannerData = getCachedSessionData(sessionCache, plannerCacheKey);
 
   if (cachedPlannerData?.plannerData) {
     plannerThread = cachedPlannerData.plannerData.thread;
   } else {
-    plannerThread = await client.threads.get<PlannerGraphState>(
-      plannerSession.threadId,
-    );
+    try {
+      plannerThread = await client.threads.get<PlannerGraphState>(
+        plannerSession.threadId,
+      );
 
-    // No run fetch needed for planners - thread status is sufficient
+      // No run fetch needed for planners - thread status is sufficient
 
-    setCachedSessionData(sessionCache, plannerCacheKey, {
-      plannerData: { thread: plannerThread },
-    });
+      setCachedSessionData(sessionCache, plannerCacheKey, {
+        plannerData: { thread: plannerThread },
+      });
+    } catch (err) {
+      // Thread might not be queryable yet due to race conditions with in-memory storage
+      // The run might still be working, so we return a "running" status
+      const errStatus = (err as { status?: number })?.status;
+      if (errStatus === 404) {
+        console.warn("[thread-status] Planner thread not found, assuming running:", {
+          threadId: plannerSession.threadId,
+          runId: plannerSession.runId,
+        });
+        return {
+          status: "running",
+          runId: plannerSession.runId,
+          threadId: plannerSession.threadId,
+          graph: "planner",
+          plannerStatus: {
+            graph: "planner",
+            runId: plannerSession.runId,
+            threadId: plannerSession.threadId,
+            status: "running",
+          },
+        };
+      }
+      throw err;
+    }
+  }
+
+  // plannerThread should never be null here since we return early on 404
+  if (!plannerThread) {
+    return {
+      status: "running",
+      runId: plannerSession.runId,
+      threadId: plannerSession.threadId,
+      graph: "planner",
+      plannerStatus: {
+        graph: "planner",
+        runId: plannerSession.runId,
+        threadId: plannerSession.threadId,
+        status: "running",
+      },
+    };
   }
 
   // Use thread status directly for most cases

@@ -1,8 +1,8 @@
 "use client";
 
 import { Thread } from "@langchain/langgraph-sdk";
-import { ReactNode, useCallback, useState, useEffect } from "react";
-import { createClient } from "./client";
+import { ReactNode, useCallback, useState, useEffect, useMemo } from "react";
+import { createClient, resolveApiUrl } from "./client";
 import { GraphState } from "@openswe/shared/open-swe/types";
 import { ThreadContext, ThreadContextType } from "./thread-context";
 import {
@@ -11,7 +11,11 @@ import {
 } from "@/lib/thread";
 
 export function ThreadProvider({ children }: { children: ReactNode }) {
-  const apiUrl: string | undefined = process.env.NEXT_PUBLIC_API_URL ?? "";
+  // Resolve API URL to absolute URL (handles relative URLs like /api)
+  const apiUrl = useMemo(
+    () => resolveApiUrl(process.env.NEXT_PUBLIC_API_URL ?? "/api"),
+    [],
+  );
   const assistantId: string | undefined =
     process.env.NEXT_PUBLIC_ASSISTANT_ID ?? "";
 

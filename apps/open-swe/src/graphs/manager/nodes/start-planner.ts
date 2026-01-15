@@ -77,6 +77,28 @@ export async function startPlanner(
         : {}),
     };
 
+    // Explicitly create the thread FIRST before creating the run
+    // This ensures the thread is registered in LangGraph's storage and can be queried
+    // Without this, the thread may not be accessible via the API after creation
+    if (!state.plannerSession?.threadId) {
+      try {
+        await langGraphClient.threads.create({
+          threadId: plannerThreadId,
+          metadata: {
+            assistant_id: PLANNER_GRAPH_ID,
+            graph_id: PLANNER_GRAPH_ID,
+          },
+        });
+        logger.info("Created new planner thread", { plannerThreadId });
+      } catch (err) {
+        logger.error("Failed to create planner thread", {
+          plannerThreadId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+    }
+
     const run = await langGraphClient.runs.create(
       plannerThreadId,
       PLANNER_GRAPH_ID,
@@ -91,7 +113,6 @@ export async function startPlanner(
             }),
           },
         },
-        ifNotExists: "create",
         streamResumable: true,
         streamMode: OPEN_SWE_STREAM_MODE as StreamMode[],
       },

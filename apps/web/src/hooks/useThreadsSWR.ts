@@ -1,6 +1,6 @@
 import useSWR from "swr";
 import { Thread } from "@langchain/langgraph-sdk";
-import { createClient } from "@/providers/client";
+import { createClient, resolveApiUrl } from "@/providers/client";
 import { THREAD_SWR_CONFIG } from "@/lib/swr-config";
 import {
   getAlternateThreadSearchMetadata,
@@ -85,7 +85,8 @@ export function useThreadsSWR<
     ...pagination,
   };
 
-  const apiUrl: string | undefined = process.env.NEXT_PUBLIC_API_URL ?? "";
+  // Resolve API URL to absolute URL (handles relative URLs like /api)
+  const apiUrl: string = resolveApiUrl(process.env.NEXT_PUBLIC_API_URL ?? "/api");
 
   // Create a unique key for SWR caching based on assistantId and pagination parameters
   const swrKey = useMemo(() => {

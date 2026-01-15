@@ -13,6 +13,7 @@ import {
 import { isAllowedUser } from "@openswe/shared/allowed-users";
 import { decryptSecret } from "@openswe/shared/crypto";
 import { API_KEY_REQUIRED_MESSAGE } from "@openswe/shared/constants";
+import { isMockLLMEnabled, createMockModel } from "./mock-model.js";
 
 const logger = createLogger(LogLevel.INFO, "ModelManager");
 
@@ -169,6 +170,15 @@ export class ModelManager {
     config: ModelLoadConfig,
     graphConfig: GraphConfig,
   ) {
+    // Check if mock LLM mode is enabled
+    if (isMockLLMEnabled()) {
+      logger.info("Mock LLM mode enabled - returning MockChatModel", {
+        provider: config.provider,
+        modelName: config.modelName,
+      });
+      return createMockModel() as unknown as ConfigurableModel;
+    }
+
     const {
       provider,
       modelName,

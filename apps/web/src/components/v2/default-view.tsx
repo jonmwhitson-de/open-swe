@@ -27,6 +27,7 @@ import { useThreadsStatus } from "@/hooks/useThreadsStatus";
 import { Thread } from "@langchain/langgraph-sdk";
 import { ManagerGraphState } from "@openswe/shared/open-swe/manager/types";
 import { useState, useMemo } from "react";
+import { resolveApiUrl } from "@/providers/client";
 import { threadsToMetadata } from "@/lib/thread-utils";
 import { Settings, BookOpen } from "lucide-react";
 import NextLink from "next/link";
@@ -101,7 +102,11 @@ interface DefaultViewProps {
 export function DefaultView({ threads, threadsLoading }: DefaultViewProps) {
   const router = useRouter();
   const [quickActionPrompt, setQuickActionPrompt] = useState("");
-  const apiUrl: string | undefined = process.env.NEXT_PUBLIC_API_URL ?? "";
+  // Resolve API URL to absolute URL (handles relative URLs like /api)
+  const apiUrl = useMemo(
+    () => resolveApiUrl(process.env.NEXT_PUBLIC_API_URL ?? "/api"),
+    [],
+  );
   const [draftToLoad, setDraftToLoad] = useState("");
   const assistantId: string | undefined = MANAGER_GRAPH_ID;
   const { getConfig } = useConfigStore();
