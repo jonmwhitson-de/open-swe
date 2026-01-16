@@ -489,17 +489,24 @@ export function ThreadView({
         threadId: selectedFeatureRunState.threadId,
       });
     } else if ((featureRunStream.messages?.length ?? 0) > 0) {
-      // Check if the active task is actually completed by the programmer
-      // Don't mark feature as complete just because the stream stopped loading
-      const taskPlan = featureRunStream.values?.taskPlan;
-      const activeTask = taskPlan?.tasks?.[taskPlan?.activeTaskIndex];
-      const isTaskCompleted = activeTask?.completed === true;
+      // The planner has finished - check if programmer exists and is complete
+      const programmerSessionFromPlanner = featureRunStream.values?.programmerSession;
 
-      if (!isTaskCompleted) {
-        // Programmer hasn't finished yet - keep status as running
+      if (programmerSessionFromPlanner?.threadId) {
+        // Programmer was spawned - need to wait for programmer to finish
+        // The programmerStream watches the programmer thread and its taskPlan
+        // will update when the programmer completes
+        if (currentStatus !== "running") {
+          setFeatureRunStatus(selectedFeatureId, "running", {
+            runId: selectedFeatureRunState.runId,
+            threadId: selectedFeatureRunState.threadId,
+          });
+        }
         return;
       }
 
+      // No programmer session - planner finished without spawning programmer
+      // (edge case, but handle it)
       if (currentStatus === "completed") {
         return;
       }
@@ -512,12 +519,11 @@ export function ThreadView({
     featureRunStream.error,
     featureRunStream.isLoading,
     featureRunStream.messages,
-    featureRunStream.values?.taskPlan,
+    featureRunStream.values?.programmerSession,
     selectedFeatureId,
     selectedFeatureRunState,
     setFeatureRunStatus,
   ]);
-
 
   const plannerStream = useStream<PlannerGraphState>({
     apiUrl: resolvedApiUrl,
@@ -559,6 +565,52 @@ export function ThreadView({
     fetchStateHistory: false,
     defaultHeaders: { [LOCAL_MODE_HEADER]: "true" },
   });
+
+  // Watch programmerStream for feature run completion
+  // This triggers when the programmer finishes after being spawned by the feature run planner
+  useEffect(() => {
+    if (!selectedFeatureId || !selectedFeatureRunState) return;
+
+    const { status: currentStatus } = selectedFeatureRunState;
+
+    // Only check for completion if we're in running state and programmer session exists
+    const programmerSessionFromPlanner = featureRunStream.values?.programmerSession;
+    if (currentStatus !== "running" || !programmerSessionFromPlanner?.threadId) {
+      return;
+    }
+
+    // Check if this programmerStream is watching the feature run's programmer
+    if (programmerSession?.threadId !== programmerSessionFromPlanner.threadId) {
+      return;
+    }
+
+    // Check if programmer is done loading and has completed all tasks
+    if (programmerStream.isLoading) {
+      return;
+    }
+
+    const taskPlan = programmerStream.values?.taskPlan;
+    const activeTask = taskPlan?.tasks?.[taskPlan?.activeTaskIndex];
+    const isTaskCompleted = activeTask?.completed === true;
+
+    if (!isTaskCompleted) {
+      return;
+    }
+
+    // Programmer finished - mark feature as complete
+    setFeatureRunStatus(selectedFeatureId, "completed", {
+      runId: selectedFeatureRunState.runId,
+      threadId: selectedFeatureRunState.threadId,
+    });
+  }, [
+    featureRunStream.values?.programmerSession,
+    programmerSession?.threadId,
+    programmerStream.isLoading,
+    programmerStream.values?.taskPlan,
+    selectedFeatureId,
+    selectedFeatureRunState,
+    setFeatureRunStatus,
+  ]);
 
   const managerActiveFeatureIds = stream.values?.activeFeatureIds;
   const plannerActiveFeatureIds = plannerStream.values?.activeFeatureIds;
