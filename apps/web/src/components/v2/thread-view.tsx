@@ -1045,6 +1045,33 @@ export function ThreadView({
     );
   };
 
+  // Generate all features - extracts and creates all features discussed in conversation
+  const handleGenerateAllFeatures = () => {
+    // Clear any pending feature graph prompt to prevent auto-generation
+    setPendingFeatureGraphPrompt(null);
+
+    const generateAllMessage = new HumanMessage({
+      id: uuidv4(),
+      content: "[GENERATE_ALL_FEATURES] Please extract and create all the features we discussed in this conversation.",
+      additional_kwargs: {
+        requestSource: "open-swe",
+        generateAllFeatures: true,
+      },
+    });
+    stream.submit(
+      {
+        messages: [generateAllMessage],
+      },
+      {
+        streamResumable: true,
+        optimisticValues: (prev) => ({
+          ...prev,
+          messages: [...(prev.messages ?? []), generateAllMessage],
+        }),
+      },
+    );
+  };
+
   const filteredMessages = stream.messages.filter((message) => {
     return !message.id?.startsWith(DO_NOT_RENDER_ID_PREFIX);
   });
@@ -1165,6 +1192,7 @@ export function ThreadView({
           disableSubmit={shouldDisableManagerInput}
           stream={stream}
           onLockInFeature={handleLockInFeature}
+          onGenerateAllFeatures={handleGenerateAllFeatures}
         />
         {/* Right Side - Actions & Plan */}
         <div

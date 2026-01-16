@@ -14,6 +14,7 @@ import {
   BaseMessage,
   ToolMessage,
   isHumanMessage,
+  isAIMessage,
 } from "@langchain/core/messages";
 import { z } from "zod";
 import { getMessageContentString } from "@openswe/shared/messages";
@@ -61,6 +62,20 @@ const createFeatureSchema = z.object({
   featureId: z.string(),
   name: z.string(),
   summary: z.string(),
+});
+
+/**
+ * Schema for batch feature extraction from interview conversation.
+ * Used when user clicks "Generate all features" to create multiple features at once.
+ */
+const extractAndCreateFeaturesSchema = z.object({
+  features: z.array(z.object({
+    featureId: z.string().describe("Unique identifier for the feature, e.g., 'feature-user-auth'"),
+    name: z.string().describe("Human-readable name for the feature"),
+    description: z.string().describe("Detailed description of what this feature does"),
+    dependencies: z.array(z.string()).optional().describe("IDs of other features this depends on"),
+  })).describe("All features extracted from the conversation"),
+  response: z.string().describe("Summary message to show the user about all created features"),
 });
 
 const proposeSchema = z.object({
@@ -260,6 +275,195 @@ const isLockInRequest = (message: BaseMessage): boolean => {
     (message.additional_kwargs?.lockInFeature === true);
 };
 
+/**
+ * Check if this is a "generate all features" request where the user wants to
+ * extract and create all features discussed in the interview conversation.
+ */
+const isGenerateAllFeaturesRequest = (message: BaseMessage): boolean => {
+  const content = getMessageContentString(message.content);
+  return content.includes("[GENERATE_ALL_FEATURES]") ||
+    (message.additional_kwargs?.generateAllFeatures === true);
+};
+
+/**
+ * Format the FULL conversation history for batch feature extraction.
+ * Unlike formatConversationHistory, this includes the complete conversation
+ * to ensure we capture all features discussed.
+ */
+const formatFullConversationHistory = (messages: BaseMessage[]): string => {
+  // Filter out tool messages and system messages, keep human and AI messages
+  const conversationMessages = messages.filter(
+    (msg) => isHumanMessage(msg) || isAIMessage(msg),
+  );
+
+  if (conversationMessages.length === 0) {
+    return "No conversation history.";
+  }
+
+  const formatted = conversationMessages.map((msg) => {
+    const role = isHumanMessage(msg) ? "User" : "Assistant";
+    const content = getMessageContentString(msg.content);
+    // Don't truncate for full history - we want all context
+    return `${role}: ${content}`;
+  });
+
+  return formatted.join("\n\n");
+};
+
+const BATCH_EXTRACTION_SYSTEM_PROMPT = `You are a feature extraction specialist for Open SWE.
+
+Your task is to analyze the entire conversation and extract ALL features that were discussed.
+
+IMPORTANT GUIDELINES:
+1. Extract EVERY distinct feature mentioned in the conversation
+2. Create unique, descriptive featureIds (e.g., "feature-user-authentication", "feature-payment-processing")
+3. Write clear, detailed descriptions for each feature
+4. Identify dependencies between features when mentioned
+5. Do NOT skip any features - capture everything discussed
+6. Consolidate similar discussions about the same feature into one entry
+
+You MUST use the extract_and_create_features tool to output all the features at once.`;
+
+/**
+ * Handle the "Generate all features" request by extracting all features
+ * from the conversation and creating them in batch.
+ */
+async function handleGenerateAllFeatures(
+  state: ManagerGraphState,
+  config: GraphConfig,
+  featureGraph: FeatureGraph | undefined,
+  fullConversationHistory: string,
+): Promise<Command> {
+  logger.info("Handling generate all features request", {
+    workspacePath: state.workspacePath,
+    messageCount: state.messages.length,
+  });
+
+  const systemPrompt = `${BATCH_EXTRACTION_SYSTEM_PROMPT}
+
+# Full Conversation History
+${fullConversationHistory}
+
+# Current Feature Graph
+${formatFeatureCatalog(featureGraph, state.activeFeatureIds)}`;
+
+  const extractionTool = {
+    name: "extract_and_create_features",
+    description: "Extract all features from the conversation and create them in the feature graph.",
+    schema: extractAndCreateFeaturesSchema,
+  };
+
+  const model = await loadModel(config, LLMTask.ROUTER);
+  const modelSupportsParallelToolCallsParam = supportsParallelToolCallsParam(
+    config,
+    LLMTask.ROUTER,
+  );
+  const modelWithTools = model.bindTools([extractionTool], {
+    tool_choice: extractionTool.name,
+    ...(modelSupportsParallelToolCallsParam
+      ? { parallel_tool_calls: false }
+      : {}),
+  });
+
+  const aiMessage = await modelWithTools.invoke([
+    { role: "system", content: systemPrompt },
+    {
+      role: "user",
+      content: "Extract and create all features discussed in this conversation.",
+    },
+  ]);
+
+  const toolCall = aiMessage.tool_calls?.[0];
+  if (!toolCall) {
+    throw new Error("No features extracted from conversation.");
+  }
+
+  const extractedData = toolCall.args as z.infer<typeof extractAndCreateFeaturesSchema>;
+  const toolCallId = toolCall.id ?? randomUUID();
+
+  logger.info("Extracted features from conversation", {
+    featureCount: extractedData.features.length,
+    featureIds: extractedData.features.map((f) => f.featureId),
+  });
+
+  let updatedGraph = featureGraph;
+  const createdFeatures: string[] = [];
+  const toolMessages: BaseMessage[] = [];
+
+  // Create all extracted features in batch
+  for (const feature of extractedData.features) {
+    try {
+      if (!updatedGraph) {
+        updatedGraph = await initializeFeatureGraph(state.workspacePath);
+        if (!updatedGraph) {
+          throw new Error("Workspace path is not set; cannot initialize feature graph.");
+        }
+      }
+
+      // Skip if feature already exists
+      if (updatedGraph.hasFeature(feature.featureId)) {
+        logger.info("Skipping existing feature", { featureId: feature.featureId });
+        continue;
+      }
+
+      updatedGraph = await createFeatureNode(
+        updatedGraph,
+        {
+          id: feature.featureId,
+          name: feature.name,
+          summary: feature.description,
+        },
+        state.workspacePath,
+      );
+
+      createdFeatures.push(feature.name);
+
+      logger.info("Created feature from batch extraction", {
+        featureId: feature.featureId,
+        name: feature.name,
+        hasDependencies: Boolean(feature.dependencies?.length),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error("Failed to create feature from batch", {
+        featureId: feature.featureId,
+        error: errorMessage,
+      });
+    }
+  }
+
+  // Create summary response
+  const summaryMessage = createdFeatures.length > 0
+    ? `Created ${createdFeatures.length} features from our conversation:\n${createdFeatures.map((name) => `• ${name}`).join("\n")}\n\n${extractedData.response}`
+    : "No new features were created. All discussed features may already exist in the graph.";
+
+  toolMessages.push(
+    recordAction("extract_and_create_features", toolCallId, summaryMessage),
+  );
+
+  // Collect all created feature IDs for activeFeatureIds
+  const newActiveFeatureIds = extractedData.features
+    .filter((f) => createdFeatures.includes(f.name))
+    .map((f) => f.featureId);
+
+  const updates: ManagerGraphUpdate = {
+    messages: [aiMessage, ...toolMessages],
+    ...(newActiveFeatureIds.length > 0
+      ? { activeFeatureIds: mergeActiveFeatureIds(newActiveFeatureIds, state.activeFeatureIds) }
+      : {}),
+    // Clear interview mode state after successful generation
+    interviewModeState: {
+      isActive: false,
+      featureDrafts: [],
+    },
+  };
+
+  return new Command({
+    update: updates,
+    goto: END,
+  });
+}
+
 export async function featureGraphAgent(
   state: ManagerGraphState,
   config: GraphConfig,
@@ -275,14 +479,31 @@ export async function featureGraphAgent(
   // This prevents state from growing too large and causing serialization errors.
   const featureGraph = await initializeFeatureGraph(state.workspacePath);
 
-  // Check if this is a lock-in request
+  // Check if this is a lock-in request or generate all features request
   const isLockIn = isLockInRequest(userMessage);
+  const isGenerateAll = isGenerateAllFeaturesRequest(userMessage);
 
   // Build the system prompt with conversation history for context
   const conversationHistory = formatConversationHistory(state.messages);
+
+  // For generate all features, we use the full conversation (more context)
+  const fullConversationHistory = isGenerateAll
+    ? formatFullConversationHistory(state.messages)
+    : conversationHistory;
+
   const lockInInstruction = isLockIn
     ? "\n\n# IMPORTANT: Lock-in Request\nThe user has clicked 'Lock in feature'. Based on the conversation history above, you MUST use the create_feature tool to add the discussed feature to the graph. Extract the feature name and description from the conversation and create it now."
     : "";
+
+  // Handle "Generate all features" request - batch feature extraction
+  if (isGenerateAll) {
+    return await handleGenerateAllFeatures(
+      state,
+      config,
+      featureGraph,
+      fullConversationHistory,
+    );
+  }
 
   const systemPrompt = `${FEATURE_AGENT_SYSTEM_PROMPT}\n\n# Conversation History\n${conversationHistory}\n\n# Current Proposals\n${formatProposals(proposalState)}\n\n# Feature Graph\n${formatFeatureCatalog(featureGraph, state.activeFeatureIds)}${lockInInstruction}`;
 
@@ -334,6 +555,7 @@ export async function featureGraphAgent(
     hasFeatureGraph: Boolean(featureGraph),
     featureCount: featureGraph?.listFeatures().length ?? 0,
     isLockIn,
+    isGenerateAll,
     userMessage: getMessageContentString(userMessage.content).slice(0, 100),
   });
 

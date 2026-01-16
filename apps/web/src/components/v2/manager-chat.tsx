@@ -6,7 +6,7 @@ import { useState } from "react";
 import { StickToBottom } from "use-stick-to-bottom";
 import { TooltipIconButton } from "../ui/tooltip-icon-button";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bot, Copy, CopyCheck, ArrowUp, User, AlertCircle, MessageCircleQuestion, CheckCircle2 } from "lucide-react";
+import { Bot, Copy, CopyCheck, ArrowUp, User, AlertCircle, MessageCircleQuestion, CheckCircle2, Sparkles } from "lucide-react";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
 import { isAIMessageSDK } from "@/lib/langchain-messages";
@@ -84,6 +84,8 @@ interface ManagerChatProps {
   stream?: ReturnType<typeof useStream<ManagerGraphState>>;
   // Lock in feature callback - signals user is done providing details
   onLockInFeature?: () => void;
+  // Generate all features callback - extracts and creates all features from conversation
+  onGenerateAllFeatures?: () => void;
 }
 
 function extractResponseFromMessage(message: Message): string {
@@ -175,6 +177,7 @@ export function ManagerChat({
   disableSubmit,
   stream,
   onLockInFeature,
+  onGenerateAllFeatures,
 }: ManagerChatProps) {
   const { user } = useUser();
   const hasInterrupt = Boolean(stream?.interrupt);
@@ -281,17 +284,30 @@ export function ManagerChat({
                             Type your response in the input below, or lock in the feature if you have enough detail.
                           </p>
                         </div>
-                        {onLockInFeature && (
-                          <Button
-                            onClick={onLockInFeature}
-                            size="sm"
-                            variant="outline"
-                            className="border-green-300 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800 dark:border-green-700 dark:bg-green-950/50 dark:text-green-300 dark:hover:bg-green-900/50"
-                          >
-                            <CheckCircle2 className="mr-2 size-4" />
-                            Lock in feature
-                          </Button>
-                        )}
+                        <div className="flex flex-wrap gap-2">
+                          {onLockInFeature && (
+                            <Button
+                              onClick={onLockInFeature}
+                              size="sm"
+                              variant="outline"
+                              className="border-green-300 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800 dark:border-green-700 dark:bg-green-950/50 dark:text-green-300 dark:hover:bg-green-900/50"
+                            >
+                              <CheckCircle2 className="mr-2 size-4" />
+                              Lock in feature
+                            </Button>
+                          )}
+                          {onGenerateAllFeatures && (
+                            <Button
+                              onClick={onGenerateAllFeatures}
+                              size="sm"
+                              variant="outline"
+                              className="border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:text-purple-800 dark:border-purple-700 dark:bg-purple-950/50 dark:text-purple-300 dark:hover:bg-purple-900/50"
+                            >
+                              <Sparkles className="mr-2 size-4" />
+                              Generate all features
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

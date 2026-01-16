@@ -18,9 +18,33 @@ export const FeatureProposalSchema = z.object({
   updatedAt: z.string(),
 });
 
+/**
+ * Represents a feature draft captured during interview mode.
+ * These are features discussed in conversation but not yet created in the graph.
+ */
+export const FeatureDraftSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  dependencies: z.array(z.string()).optional(),
+  extractedAt: z.string(),
+});
+
 export const FeatureProposalStateSchema = z.object({
   proposals: z.array(FeatureProposalSchema),
   activeProposalId: z.string().optional(),
+});
+
+/**
+ * State for interview mode - tracks features discussed during discovery conversation.
+ */
+export const InterviewModeStateSchema = z.object({
+  /** Whether interview mode is active */
+  isActive: z.boolean(),
+  /** Features extracted from conversation but not yet created */
+  featureDrafts: z.array(FeatureDraftSchema),
+  /** Timestamp when interview started */
+  startedAt: z.string().optional(),
 });
 
 export const ManagerGraphStateObj = MessagesZodState.extend({
@@ -121,9 +145,42 @@ export const ManagerGraphStateObj = MessagesZodState.extend({
    * Tracks feature proposals and their lifecycle state across turns.
    */
   featureProposals: FeatureProposalStateSchema.optional(),
+  /**
+   * Interview mode state - tracks features discussed during discovery conversation.
+   * When active, features are accumulated as drafts until user triggers batch generation.
+   */
+  interviewModeState: withLangGraph<
+    z.infer<typeof InterviewModeStateSchema> | undefined,
+    z.infer<typeof InterviewModeStateSchema> | undefined,
+    z.ZodType<z.infer<typeof InterviewModeStateSchema> | undefined>
+  >(InterviewModeStateSchema.optional(), {
+    reducer: {
+      schema: InterviewModeStateSchema.optional(),
+      fn: (
+        state: z.infer<typeof InterviewModeStateSchema> | undefined,
+        update: z.infer<typeof InterviewModeStateSchema> | undefined,
+      ) => {
+        if (!update) return state;
+        // Merge feature drafts if both exist
+        if (state?.featureDrafts && update.featureDrafts) {
+          const existingIds = new Set(state.featureDrafts.map((d) => d.id));
+          const newDrafts = update.featureDrafts.filter(
+            (d) => !existingIds.has(d.id),
+          );
+          return {
+            ...update,
+            featureDrafts: [...state.featureDrafts, ...newDrafts],
+          };
+        }
+        return update;
+      },
+    },
+  }),
 });
 
 export type ManagerGraphState = z.infer<typeof ManagerGraphStateObj>;
 export type ManagerGraphUpdate = Partial<ManagerGraphState>;
 export type FeatureProposal = z.infer<typeof FeatureProposalSchema>;
 export type FeatureProposalState = z.infer<typeof FeatureProposalStateSchema>;
+export type FeatureDraft = z.infer<typeof FeatureDraftSchema>;
+export type InterviewModeState = z.infer<typeof InterviewModeStateSchema>;

@@ -123,6 +123,11 @@ export async function classifyMessage(
     userMessage.additional_kwargs?.lockInFeature === true ||
     getMessageContentString(userMessage.content).includes("[LOCK_IN_FEATURE]");
 
+  // Check if user clicked "Generate all features" to batch create features from interview
+  const isGenerateAllFeatures =
+    userMessage.additional_kwargs?.generateAllFeatures === true ||
+    getMessageContentString(userMessage.content).includes("[GENERATE_ALL_FEATURES]");
+
   // Load feature graph from file instead of state to avoid storing it in state.
   // This prevents state from growing too large and causing serialization errors.
   const featureGraph = await loadFeatureGraphFromFile(state.workspacePath);
@@ -135,6 +140,23 @@ export async function classifyMessage(
     // Route to feature-graph-agent to create the feature based on the conversation.
     // The agent will use the conversation history to understand what feature was discussed
     // and create it in the graph.
+    return new Command({
+      update: {
+        userHasApprovedFeature: true,
+      },
+      goto: "feature-graph-agent",
+    });
+  }
+
+  if (isGenerateAllFeatures && phase === "design") {
+    logger.info("User triggered generate all features - routing to feature-graph-agent for batch creation", {
+      hasFeatureGraph: Boolean(featureGraph),
+      hasDrafts: Boolean(state.interviewModeState?.featureDrafts?.length),
+    });
+
+    // Route to feature-graph-agent to extract and create ALL features discussed in conversation.
+    // The agent will analyze the full conversation history, extract all features mentioned,
+    // and create them in batch.
     return new Command({
       update: {
         userHasApprovedFeature: true,
