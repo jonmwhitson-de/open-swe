@@ -12,9 +12,13 @@ import {
   ListChecks,
   Loader2,
   Network,
+  Pause,
+  Play,
+  Square,
   ThumbsDown,
   ThumbsUp,
   Trash2,
+  Wand2,
   XCircle,
 } from "lucide-react";
 
@@ -43,6 +47,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { calculateLastActivity } from "@/lib/thread-utils";
 import { cn } from "@/lib/utils";
 import {
+  AutoDevelopState,
   FeatureResource,
   FeatureRunState,
   FeatureRunStatus,
@@ -84,12 +89,17 @@ export function FeatureInsightsPanel({
     error,
     threadId,
     workspacePath,
+    autoDevelop,
     fetchGraphForWorkspace,
     generateGraph,
     startFeatureDevelopment,
     deleteFeature,
     selectFeature,
     respondToProposal,
+    startAutoDevelop,
+    pauseAutoDevelop,
+    resumeAutoDevelop,
+    stopAutoDevelop,
   } = useFeatureGraphStore(
     useShallow((state) => ({
       graph: state.graph,
@@ -108,12 +118,17 @@ export function FeatureInsightsPanel({
       error: state.error,
       threadId: state.threadId,
       workspacePath: state.workspacePath,
+      autoDevelop: state.autoDevelop,
       fetchGraphForWorkspace: state.fetchGraphForWorkspace,
       generateGraph: state.generateGraph,
       startFeatureDevelopment: state.startFeatureDevelopment,
       deleteFeature: state.deleteFeature,
       selectFeature: state.selectFeature,
       respondToProposal: state.respondToProposal,
+      startAutoDevelop: state.startAutoDevelop,
+      pauseAutoDevelop: state.pauseAutoDevelop,
+      resumeAutoDevelop: state.resumeAutoDevelop,
+      stopAutoDevelop: state.stopAutoDevelop,
     })),
   );
 
@@ -245,6 +260,37 @@ export function FeatureInsightsPanel({
     });
   }, [selectedFeature, deleteFeature]);
 
+  const handleStartAutoDevelop = useCallback(() => {
+    onStartPlanner?.();
+    void startAutoDevelop().catch((error) => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to start auto-develop";
+      toast.error(message);
+    });
+  }, [onStartPlanner, startAutoDevelop]);
+
+  const handlePauseAutoDevelop = useCallback(() => {
+    pauseAutoDevelop();
+    toast.info("Auto-develop paused");
+  }, [pauseAutoDevelop]);
+
+  const handleResumeAutoDevelop = useCallback(() => {
+    void resumeAutoDevelop().catch((error) => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to resume auto-develop";
+      toast.error(message);
+    });
+  }, [resumeAutoDevelop]);
+
+  const handleStopAutoDevelop = useCallback(() => {
+    stopAutoDevelop();
+    toast.info("Auto-develop stopped");
+  }, [stopAutoDevelop]);
+
   const hasData =
     features.length > 0 ||
     activeFeatures.length > 0 ||
@@ -285,6 +331,18 @@ export function FeatureInsightsPanel({
             activeProposalId={activeProposalId}
             proposalActions={proposalActions}
             onAction={handleProposalAction}
+          />
+        )}
+
+        {features.length > 1 && (
+          <AutoDevelopPanel
+            autoDevelop={autoDevelop}
+            featuresById={featuresById}
+            totalFeatures={features.length}
+            onStart={handleStartAutoDevelop}
+            onPause={handlePauseAutoDevelop}
+            onResume={handleResumeAutoDevelop}
+            onStop={handleStopAutoDevelop}
           />
         )}
 
@@ -808,6 +866,148 @@ function FeatureDevelopmentPanel({
           <p className="text-muted-foreground text-sm">
             Start development to stream planner progress and provide feedback.
           </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AutoDevelopPanel({
+  autoDevelop,
+  featuresById,
+  totalFeatures,
+  onStart,
+  onPause,
+  onResume,
+  onStop,
+}: {
+  autoDevelop: AutoDevelopState;
+  featuresById: Record<string, FeatureNode>;
+  totalFeatures: number;
+  onStart: () => void;
+  onPause: () => void;
+  onResume: () => void;
+  onStop: () => void;
+}) {
+  const { status, queue, currentFeatureId, currentIndex, completedInSession, error } = autoDevelop;
+  const currentFeature = currentFeatureId ? featuresById[currentFeatureId] : null;
+
+  const isActive = status === "running" || status === "loading" || status === "paused";
+  const isRunning = status === "running";
+  const isPaused = status === "paused";
+  const isCompleted = status === "completed";
+  const hasError = status === "error";
+
+  // Progress calculation
+  const progress = queue.length > 0 ? Math.round((completedInSession / queue.length) * 100) : 0;
+
+  return (
+    <div className="border-border/70 bg-gradient-to-r from-violet-500/5 to-purple-500/5 rounded-md border p-3">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start gap-2">
+            <Wand2 className="text-violet-500 size-4 mt-0.5" />
+            <div className="flex flex-col">
+              <span className="text-sm leading-tight font-semibold">
+                Auto-develop all features
+              </span>
+              <span className="text-muted-foreground text-xs">
+                {isCompleted
+                  ? "All features have been developed!"
+                  : isActive
+                    ? `Developing features in dependency order (${completedInSession}/${queue.length})`
+                    : "Automatically develop all features in optimal dependency order."}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {!isActive && !isCompleted && (
+              <Button
+                size="sm"
+                onClick={onStart}
+                className="bg-violet-600 hover:bg-violet-700"
+              >
+                <Wand2 className="size-4 mr-1" />
+                Start auto-develop
+              </Button>
+            )}
+            {isRunning && (
+              <>
+                <Button size="sm" variant="outline" onClick={onPause}>
+                  <Pause className="size-4" />
+                </Button>
+                <Button size="sm" variant="outline" onClick={onStop}>
+                  <Square className="size-4" />
+                </Button>
+              </>
+            )}
+            {isPaused && (
+              <>
+                <Button size="sm" onClick={onResume} className="bg-violet-600 hover:bg-violet-700">
+                  <Play className="size-4 mr-1" />
+                  Resume
+                </Button>
+                <Button size="sm" variant="outline" onClick={onStop}>
+                  <Square className="size-4" />
+                </Button>
+              </>
+            )}
+            {isCompleted && (
+              <Button size="sm" variant="outline" onClick={onStart}>
+                <Wand2 className="size-4 mr-1" />
+                Run again
+              </Button>
+            )}
+            {hasError && (
+              <Button size="sm" variant="outline" onClick={onStart}>
+                <Wand2 className="size-4 mr-1" />
+                Retry
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        {isActive && queue.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <div className="h-2 w-full rounded-full bg-violet-100 dark:bg-violet-950">
+              <div
+                className="h-full rounded-full bg-violet-500 transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            {currentFeature && (
+              <div className="flex items-center gap-2 text-xs">
+                {isRunning && <Loader2 className="size-3 animate-spin text-violet-500" />}
+                {isPaused && <Pause className="size-3 text-amber-500" />}
+                <span className="text-muted-foreground">
+                  {isPaused ? "Paused on:" : "Developing:"}
+                </span>
+                <span className="font-medium">{currentFeature.name}</span>
+                <span className="text-muted-foreground">
+                  ({currentIndex + 1} of {queue.length})
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Completion message */}
+        {isCompleted && completedInSession > 0 && (
+          <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="size-3" />
+            <span>
+              Successfully developed {completedInSession} feature{completedInSession !== 1 ? "s" : ""}
+            </span>
+          </div>
+        )}
+
+        {/* Error message */}
+        {hasError && error && (
+          <div className="flex items-center gap-2 text-xs text-destructive">
+            <AlertCircle className="size-3" />
+            <span>{error}</span>
+          </div>
         )}
       </div>
     </div>

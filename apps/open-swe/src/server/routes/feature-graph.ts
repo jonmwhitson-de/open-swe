@@ -7,6 +7,10 @@ import {
   clarifyFeatureDescription,
   FeatureGraph,
   loadFeatureGraph,
+  getUnblockedFeatures,
+  getReadyFeatures,
+  getTopologicalFeatureOrder,
+  isFeatureCompleted,
 } from "@openswe/shared/feature-graph";
 import type { FeatureNode } from "@openswe/shared/feature-graph/types";
 import {
@@ -675,17 +679,81 @@ export function registerFeatureGraphRoute(app: Hono) {
       );
     }
 
-    // Update feature status to completed
-    const updatedGraph = applyFeatureStatus(featureGraph, featureId, "completed");
+    // Update feature status to completed and set development_progress
+    let updatedGraph = applyFeatureStatus(featureGraph, featureId, "completed");
+
+    // Also update the development_progress field
+    const serialized = updatedGraph.toJSON();
+    const nodes = new Map(serialized.nodes);
+    const completedFeature = nodes.get(featureId);
+    if (completedFeature) {
+      nodes.set(featureId, {
+        ...completedFeature,
+        development_progress: "Completed",
+      });
+      updatedGraph = new FeatureGraph({
+        version: serialized.version,
+        nodes,
+        edges: serialized.edges,
+        artifacts: serialized.artifacts,
+      });
+    }
+
     await persistFeatureGraph(updatedGraph, workspacePath);
 
-    logger.info("Marked feature as completed", { featureId, workspacePath });
+    // Get features that are now unblocked by this completion
+    const unblockedResult = getUnblockedFeatures(updatedGraph, featureId);
+
+    // Get all features that are ready to be developed (no incomplete dependencies)
+    const readyFeatures = getReadyFeatures(updatedGraph);
+
+    // Format suggested next features for the response
+    const suggestedNext = unblockedResult.nowUnblocked.map((f) => ({
+      id: f.id,
+      name: f.name,
+      description: f.description,
+      status: f.status,
+      development_progress: f.development_progress,
+    }));
+
+    const allReady = readyFeatures
+      .filter((f) => f.id !== featureId) // Exclude the just-completed feature
+      .map((f) => ({
+        id: f.id,
+        name: f.name,
+        description: f.description,
+        status: f.status,
+        development_progress: f.development_progress,
+      }));
+
+    logger.info("Marked feature as completed", {
+      featureId,
+      workspacePath,
+      unblockedCount: suggestedNext.length,
+      readyCount: allReady.length,
+    });
 
     return ctx.json({
       success: true,
       featureId,
       status: "completed",
       featureGraph: updatedGraph.toJSON(),
+      // Suggested next features based on dependency order
+      suggested_next: suggestedNext,
+      // All features that are ready to be developed
+      all_ready: allReady,
+      // Features that are still blocked
+      still_blocked: unblockedResult.stillBlocked.map((item) => ({
+        feature: {
+          id: item.feature.id,
+          name: item.feature.name,
+          description: item.feature.description,
+        },
+        remaining_blockers: item.remainingBlockers.map((b) => ({
+          id: b.id,
+          name: b.name,
+        })),
+      })),
     });
   });
 
@@ -764,6 +832,95 @@ export function registerFeatureGraphRoute(app: Hono) {
       success: true,
       featureId,
       featureGraph: updatedGraph.toJSON(),
+    });
+  });
+
+  /**
+   * Get the optimal development order for features based on dependencies.
+   * Returns features sorted topologically - dependencies first.
+   * Optionally filters to only include features that haven't been completed.
+   */
+  app.post("/feature-graph/development-order", async (ctx) => {
+    let body: {
+      workspace_path?: unknown;
+      feature_ids?: unknown;
+      include_completed?: unknown;
+    } | null = null;
+
+    try {
+      body = await ctx.req.json();
+    } catch {
+      return ctx.json(
+        { error: "Invalid JSON payload" },
+        400 as ContentfulStatusCode,
+      );
+    }
+
+    const workspacePath = resolveWorkspacePath(body);
+    const includeCompleted = body?.include_completed === true;
+
+    if (!workspacePath) {
+      return ctx.json(
+        { error: "workspace_path is required" },
+        400 as ContentfulStatusCode,
+      );
+    }
+
+    // Load feature graph from file
+    const featureGraph = await loadFeatureGraphFromFile(workspacePath);
+    if (!featureGraph) {
+      return ctx.json(
+        { error: "Feature graph not found" },
+        404 as ContentfulStatusCode,
+      );
+    }
+
+    // Get feature IDs to order - either specified or all features
+    let featureIds: string[];
+    if (Array.isArray(body?.feature_ids)) {
+      featureIds = body.feature_ids
+        .filter((id): id is string => typeof id === "string")
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0 && featureGraph.hasFeature(id));
+    } else {
+      // Default to all features
+      featureIds = featureGraph.listFeatures().map((f) => f.id);
+    }
+
+    // Get topological order
+    const orderedFeatures = getTopologicalFeatureOrder(featureGraph, featureIds);
+
+    // Filter out completed features unless requested
+    const filteredFeatures = includeCompleted
+      ? orderedFeatures
+      : orderedFeatures.filter((f) => !isFeatureCompleted(f));
+
+    // Format response
+    const developmentOrder = filteredFeatures.map((f, index) => ({
+      order: index + 1,
+      id: f.id,
+      name: f.name,
+      description: f.description,
+      status: f.status,
+      development_progress: f.development_progress,
+    }));
+
+    // Get stats
+    const completedCount = orderedFeatures.filter((f) => isFeatureCompleted(f)).length;
+    const remainingCount = orderedFeatures.length - completedCount;
+
+    logger.info("Calculated development order", {
+      workspacePath,
+      totalFeatures: orderedFeatures.length,
+      completedCount,
+      remainingCount,
+    });
+
+    return ctx.json({
+      development_order: developmentOrder,
+      total_features: orderedFeatures.length,
+      completed_count: completedCount,
+      remaining_count: remainingCount,
     });
   });
 }

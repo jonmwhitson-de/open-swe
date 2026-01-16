@@ -12,6 +12,24 @@ export interface FeatureDevelopmentResponse {
   runId: string;
 }
 
+export interface DependencyBlocker {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  development_progress?: string;
+}
+
+export interface DependencyValidationError {
+  type: "dependencies_not_complete";
+  message: string;
+  featureId: string;
+  featureName: string;
+  blockedBy: DependencyBlocker[];
+  suggestedNext: DependencyBlocker[];
+  canForce: boolean;
+}
+
 /**
  * Fetch feature graph data using workspace path directly.
  * No thread state access needed - eliminates 409 "thread busy" errors.
@@ -113,10 +131,19 @@ export async function requestFeatureGraphGeneration(
   });
 }
 
+export type StartFeatureDevelopmentResult =
+  | { success: true; response: FeatureDevelopmentResponse }
+  | { success: false; dependencyError: DependencyValidationError };
+
+/**
+ * Start feature development with dependency validation.
+ * Returns either success with planner info, or dependency error with options.
+ */
 export async function startFeatureDevelopmentRun(
   threadId: string,
   featureId: string,
-): Promise<FeatureDevelopmentResponse> {
+  options?: { force?: boolean },
+): Promise<StartFeatureDevelopmentResult> {
   if (!threadId) {
     throw new Error("Thread id is required to start feature development");
   }
@@ -133,25 +160,45 @@ export async function startFeatureDevelopmentRun(
     body: JSON.stringify({
       thread_id: threadId,
       feature_id: featureId,
+      force: options?.force ?? false,
     }),
   });
 
+  const payload = await response.json().catch(() => null);
+
+  // Handle dependency validation error (409 Conflict)
+  if (response.status === 409 && payload?.error === "dependencies_not_complete") {
+    return {
+      success: false,
+      dependencyError: {
+        type: "dependencies_not_complete",
+        message: payload.message ?? "Feature has incomplete dependencies",
+        featureId: payload.feature_id ?? featureId,
+        featureName: payload.feature_name ?? featureId,
+        blockedBy: payload.blocked_by ?? [],
+        suggestedNext: payload.suggested_next ?? [],
+        canForce: payload.can_force ?? false,
+      },
+    };
+  }
+
   if (!response.ok) {
-    const payload = await response.json().catch(() => null);
     const message =
       (payload && typeof payload.error === "string" ? payload.error : null) ??
       "Failed to start feature development";
     throw new Error(message);
   }
 
-  const payload = await response.json();
   const { planner_thread_id: plannerThreadId, run_id: runId } = payload ?? {};
 
   if (typeof plannerThreadId !== "string" || typeof runId !== "string") {
     throw new Error("Invalid response when starting feature development");
   }
 
-  return { plannerThreadId, runId } satisfies FeatureDevelopmentResponse;
+  return {
+    success: true,
+    response: { plannerThreadId, runId },
+  };
 }
 
 export type FeatureProposalAction = "approve" | "reject" | "info";

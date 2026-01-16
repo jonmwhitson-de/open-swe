@@ -9,8 +9,11 @@ import {
 import {
   clarifyFeatureDescription,
   reconcileFeatureGraph,
+  validateFeatureDependencies,
+  formatDependencyBlockerMessage,
   type FeatureGraph,
   type FeatureNode,
+  type DependencyValidationResult,
 } from "@openswe/shared/feature-graph";
 import type {
   ManagerGraphState,
@@ -255,6 +258,44 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         { error: `Feature "${featureId}" not found in feature graph` },
         { status: 404 },
+      );
+    }
+
+    // Check if user wants to force development despite incomplete dependencies
+    const forceStart = body?.force === true;
+
+    // Validate dependencies before allowing development
+    const dependencyValidation = validateFeatureDependencies(reconciledGraph, featureId);
+
+    if (!dependencyValidation.canProceed && !forceStart) {
+      // Return dependency information so the UI can show options
+      const blockedByInfo = dependencyValidation.blockedBy.map((dep) => ({
+        id: dep.id,
+        name: dep.name,
+        description: dep.description,
+        status: dep.status,
+        development_progress: dep.development_progress,
+      }));
+
+      const suggestedNextInfo = dependencyValidation.suggestedOrder.map((dep) => ({
+        id: dep.id,
+        name: dep.name,
+        description: dep.description,
+        status: dep.status,
+        development_progress: dep.development_progress,
+      }));
+
+      return NextResponse.json(
+        {
+          error: "dependencies_not_complete",
+          message: formatDependencyBlockerMessage(dependencyValidation),
+          feature_id: featureId,
+          feature_name: selectedFeature.name,
+          blocked_by: blockedByInfo,
+          suggested_next: suggestedNextInfo,
+          can_force: true,
+        },
+        { status: 409 }, // Conflict - dependencies not satisfied
       );
     }
 

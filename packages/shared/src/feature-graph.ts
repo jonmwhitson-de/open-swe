@@ -6,3 +6,4 @@ export * from "./feature-graph/writer.js";
 export * from "./feature-graph/context.js";
 export * from "./feature-graph/reconcile.js";
 export * from "./feature-graph/list-features.js";
+export * from "./feature-graph/dependency-validation.js";

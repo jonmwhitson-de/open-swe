@@ -22,6 +22,7 @@ import {
   type FeatureProposalAction,
   requestFeatureGraphGeneration,
   startFeatureDevelopmentRun,
+  type DependencyValidationError,
 } from "@/services/feature-graph.service";
 
 export type FeatureResource = {
@@ -38,6 +39,30 @@ export type FeatureRunStatus =
   | "running"
   | "completed"
   | "error";
+
+export type AutoDevelopStatus =
+  | "idle"
+  | "loading" // Loading development order
+  | "running" // Auto-developing features
+  | "paused" // Paused by user
+  | "completed" // All features developed
+  | "error";
+
+export interface AutoDevelopState {
+  status: AutoDevelopStatus;
+  /** Features queued for development, in order */
+  queue: string[];
+  /** Currently developing feature ID */
+  currentFeatureId: string | null;
+  /** Index in the queue */
+  currentIndex: number;
+  /** Total features to develop */
+  totalFeatures: number;
+  /** Number of features completed in this auto-develop session */
+  completedInSession: number;
+  /** Error message if status is 'error' */
+  error: string | null;
+}
 
 export type FeatureRunState = {
   threadId: string | null;
@@ -74,6 +99,10 @@ interface FeatureGraphStoreState {
   isLoading: boolean;
   isGeneratingGraph: boolean;
   error: string | null;
+  /** Dependency validation error - shown when trying to develop a feature with incomplete dependencies */
+  dependencyError: DependencyValidationError | null;
+  /** Auto-develop state - tracks automated sequential feature development */
+  autoDevelop: AutoDevelopState;
   /**
    * Fetch feature graph using workspace path directly.
    * No thread state access needed - eliminates 409 "thread busy" errors.
@@ -89,7 +118,22 @@ interface FeatureGraphStoreState {
   ) => Promise<void>;
   generateGraph: (workspacePath: string, prompt: string) => Promise<void>;
   requestGraphGeneration: (threadId: string) => Promise<void>;
-  startFeatureDevelopment: (featureId: string) => Promise<void>;
+  startFeatureDevelopment: (featureId: string, options?: { force?: boolean }) => Promise<void>;
+  /** Clear the current dependency error */
+  clearDependencyError: () => void;
+  /**
+   * Start auto-developing all features in dependency order.
+   * Will skip already completed features.
+   */
+  startAutoDevelop: (featureIds?: string[]) => Promise<void>;
+  /** Pause auto-development (can be resumed) */
+  pauseAutoDevelop: () => void;
+  /** Resume auto-development from where it was paused */
+  resumeAutoDevelop: () => Promise<void>;
+  /** Stop auto-development completely */
+  stopAutoDevelop: () => void;
+  /** Called when a feature completes - triggers next feature in queue if auto-developing */
+  onFeatureCompleted: (featureId: string) => Promise<void>;
   /**
    * Start development via an isolated design thread.
    * This creates a new planner thread to avoid "thread busy" errors.
@@ -129,6 +173,16 @@ interface FeatureGraphStoreState {
   clear: () => void;
 }
 
+const INITIAL_AUTO_DEVELOP_STATE: AutoDevelopState = {
+  status: "idle",
+  queue: [],
+  currentFeatureId: null,
+  currentIndex: 0,
+  totalFeatures: 0,
+  completedInSession: 0,
+  error: null,
+};
+
 const INITIAL_STATE: Omit<
     FeatureGraphStoreState,
     | "fetchGraphForWorkspace"
@@ -136,6 +190,12 @@ const INITIAL_STATE: Omit<
     | "generateGraph"
     | "requestGraphGeneration"
     | "startFeatureDevelopment"
+    | "clearDependencyError"
+    | "startAutoDevelop"
+    | "pauseAutoDevelop"
+    | "resumeAutoDevelop"
+    | "stopAutoDevelop"
+    | "onFeatureCompleted"
     | "startDesignDevelopment"
     | "respondToProposal"
     | "setFeatureRunStatus"
@@ -164,6 +224,8 @@ const INITIAL_STATE: Omit<
   isLoading: false,
   isGeneratingGraph: false,
   error: null,
+  dependencyError: null,
+  autoDevelop: INITIAL_AUTO_DEVELOP_STATE,
 };
 
 export const useFeatureGraphStore = create<FeatureGraphStoreState>(
@@ -312,7 +374,7 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
         });
       }
     },
-    async startFeatureDevelopment(featureId) {
+    async startFeatureDevelopment(featureId, options) {
       const { threadId, featureRuns, featuresById } = get();
       if (!threadId || !featureId || !featuresById[featureId]) return;
 
@@ -336,6 +398,7 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
       set((state) => ({
         ...state,
         selectedFeatureId: featureId,
+        dependencyError: null, // Clear any previous dependency error
         featureRuns: {
           ...state.featureRuns,
           [featureId]: nextRunState,
@@ -343,10 +406,33 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
       }));
 
       try {
-        const { plannerThreadId, runId } = await startFeatureDevelopmentRun(
+        const result = await startFeatureDevelopmentRun(
           threadId,
           featureId,
+          { force: options?.force },
         );
+
+        // Handle dependency validation error
+        if (!result.success) {
+          set((state) => ({
+            ...state,
+            selectedFeatureId: featureId,
+            dependencyError: result.dependencyError,
+            featureRuns: {
+              ...state.featureRuns,
+              [featureId]: {
+                threadId: null,
+                runId: null,
+                status: "idle", // Reset to idle - not an error, just blocked
+                error: null,
+                updatedAt: Date.now(),
+              },
+            },
+          }));
+          return; // Don't throw - let UI handle the dependency dialog
+        }
+
+        const { plannerThreadId, runId } = result.response;
 
         set((state) => {
           // Add featureId to activeFeatureIds if not already present
@@ -357,6 +443,7 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
           return {
             ...state,
             selectedFeatureId: featureId,
+            dependencyError: null,
             activeFeatureIds: newActiveFeatureIds,
             featureRuns: {
               ...state.featureRuns,
@@ -399,6 +486,187 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
         }));
 
         throw new Error(message);
+      }
+    },
+    clearDependencyError() {
+      set({ dependencyError: null });
+    },
+    async startAutoDevelop(featureIds) {
+      const { workspacePath, threadId, autoDevelop } = get();
+
+      if (!workspacePath || !threadId) {
+        console.error("Cannot start auto-develop: missing workspacePath or threadId");
+        return;
+      }
+
+      if (autoDevelop.status === "running" || autoDevelop.status === "loading") {
+        console.warn("Auto-develop already in progress");
+        return;
+      }
+
+      set({
+        autoDevelop: {
+          ...INITIAL_AUTO_DEVELOP_STATE,
+          status: "loading",
+        },
+      });
+
+      try {
+        // Fetch optimal development order from API
+        const response = await fetch("/api/feature-graph/development-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspace_path: workspacePath,
+            feature_ids: featureIds,
+            include_completed: false, // Skip already completed features
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error ?? "Failed to get development order");
+        }
+
+        const data = await response.json();
+        const queue = (data.development_order ?? []).map(
+          (f: { id: string }) => f.id,
+        );
+
+        if (queue.length === 0) {
+          set({
+            autoDevelop: {
+              ...INITIAL_AUTO_DEVELOP_STATE,
+              status: "completed",
+              totalFeatures: 0,
+            },
+          });
+          return;
+        }
+
+        // Start with the first feature
+        const firstFeatureId = queue[0];
+
+        set({
+          autoDevelop: {
+            status: "running",
+            queue,
+            currentFeatureId: firstFeatureId,
+            currentIndex: 0,
+            totalFeatures: queue.length,
+            completedInSession: 0,
+            error: null,
+          },
+        });
+
+        // Start developing the first feature
+        await get().startFeatureDevelopment(firstFeatureId, { force: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to start auto-develop";
+        set({
+          autoDevelop: {
+            ...INITIAL_AUTO_DEVELOP_STATE,
+            status: "error",
+            error: message,
+          },
+        });
+      }
+    },
+    pauseAutoDevelop() {
+      const { autoDevelop } = get();
+      if (autoDevelop.status !== "running") return;
+
+      set({
+        autoDevelop: {
+          ...autoDevelop,
+          status: "paused",
+        },
+      });
+    },
+    async resumeAutoDevelop() {
+      const { autoDevelop } = get();
+      if (autoDevelop.status !== "paused") return;
+
+      const currentFeatureId = autoDevelop.currentFeatureId;
+      if (!currentFeatureId) {
+        // No current feature, try to start next
+        await get().onFeatureCompleted("");
+        return;
+      }
+
+      set({
+        autoDevelop: {
+          ...autoDevelop,
+          status: "running",
+        },
+      });
+
+      // Check if current feature is still running
+      const { featureRuns } = get();
+      const currentRun = featureRuns[currentFeatureId];
+
+      if (!currentRun || currentRun.status === "idle" || currentRun.status === "error") {
+        // Restart the current feature
+        await get().startFeatureDevelopment(currentFeatureId, { force: true });
+      }
+      // If it's already running, just let it continue
+    },
+    stopAutoDevelop() {
+      set({
+        autoDevelop: INITIAL_AUTO_DEVELOP_STATE,
+      });
+    },
+    async onFeatureCompleted(featureId) {
+      const { autoDevelop, threadId } = get();
+
+      // If not auto-developing, just return
+      if (autoDevelop.status !== "running") return;
+
+      // Check if this is the feature we were waiting for
+      if (featureId && autoDevelop.currentFeatureId !== featureId) return;
+
+      const nextIndex = autoDevelop.currentIndex + 1;
+      const completedInSession = autoDevelop.completedInSession + 1;
+
+      // Check if we're done
+      if (nextIndex >= autoDevelop.queue.length) {
+        set({
+          autoDevelop: {
+            ...autoDevelop,
+            status: "completed",
+            currentFeatureId: null,
+            currentIndex: nextIndex,
+            completedInSession,
+          },
+        });
+        return;
+      }
+
+      // Start the next feature
+      const nextFeatureId = autoDevelop.queue[nextIndex];
+
+      set({
+        autoDevelop: {
+          ...autoDevelop,
+          currentFeatureId: nextFeatureId,
+          currentIndex: nextIndex,
+          completedInSession,
+        },
+      });
+
+      if (threadId) {
+        try {
+          await get().startFeatureDevelopment(nextFeatureId, { force: true });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Failed to start next feature";
+          set((state) => ({
+            autoDevelop: {
+              ...state.autoDevelop,
+              status: "error",
+              error: message,
+            },
+          }));
+        }
       }
     },
     async respondToProposal(proposalId, action, options) {
@@ -490,10 +758,14 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
         };
       });
 
-      // If completed, persist the completion to the backend
+      // If completed, persist the completion to the backend and trigger auto-develop
       if (status === "completed") {
         get().completeFeature(featureId).catch((error) => {
           console.error("Failed to persist feature completion:", error);
+        });
+        // Trigger next feature in auto-develop queue
+        get().onFeatureCompleted(featureId).catch((error) => {
+          console.error("Failed to trigger next auto-develop feature:", error);
         });
       }
     },
