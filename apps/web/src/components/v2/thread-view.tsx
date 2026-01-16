@@ -67,6 +67,52 @@ type ThreadTab = "feature-graph" | "planner" | "programmer" | "preview";
 const isThreadTab = (value: string): value is ThreadTab =>
   value === "planner" || value === "programmer" || value === "feature-graph" || value === "preview";
 
+/**
+ * Determines if a feature run should be marked as complete.
+ * A feature is complete when:
+ * 1. The planner has spawned a programmer session
+ * 2. The programmerStream is watching that same programmer thread
+ * 3. The programmer is done loading
+ * 4. The active task in the taskPlan is marked as completed
+ */
+export const shouldMarkFeatureRunComplete = ({
+  currentStatus,
+  programmerSessionFromPlanner,
+  programmerSessionThreadId,
+  programmerIsLoading,
+  taskPlan,
+}: {
+  currentStatus: string;
+  programmerSessionFromPlanner?: { threadId?: string };
+  programmerSessionThreadId?: string;
+  programmerIsLoading: boolean;
+  taskPlan?: { tasks?: { completed?: boolean }[]; activeTaskIndex?: number };
+}): boolean => {
+  // Only check completion if we're in running state
+  if (currentStatus !== "running") {
+    return false;
+  }
+
+  // Programmer session must exist
+  if (!programmerSessionFromPlanner?.threadId) {
+    return false;
+  }
+
+  // programmerStream must be watching the correct thread
+  if (programmerSessionThreadId !== programmerSessionFromPlanner.threadId) {
+    return false;
+  }
+
+  // Programmer must be done loading
+  if (programmerIsLoading) {
+    return false;
+  }
+
+  // Check if active task is completed
+  const activeTask = taskPlan?.tasks?.[taskPlan?.activeTaskIndex ?? -1];
+  return activeTask?.completed === true;
+};
+
 export const shouldAutoGenerateFeatureGraph = ({
   managerIsLoading,
   plannerIsLoading,
@@ -571,29 +617,15 @@ export function ThreadView({
   useEffect(() => {
     if (!selectedFeatureId || !selectedFeatureRunState) return;
 
-    const { status: currentStatus } = selectedFeatureRunState;
+    const shouldComplete = shouldMarkFeatureRunComplete({
+      currentStatus: selectedFeatureRunState.status,
+      programmerSessionFromPlanner: featureRunStream.values?.programmerSession,
+      programmerSessionThreadId: programmerSession?.threadId,
+      programmerIsLoading: programmerStream.isLoading,
+      taskPlan: programmerStream.values?.taskPlan,
+    });
 
-    // Only check for completion if we're in running state and programmer session exists
-    const programmerSessionFromPlanner = featureRunStream.values?.programmerSession;
-    if (currentStatus !== "running" || !programmerSessionFromPlanner?.threadId) {
-      return;
-    }
-
-    // Check if this programmerStream is watching the feature run's programmer
-    if (programmerSession?.threadId !== programmerSessionFromPlanner.threadId) {
-      return;
-    }
-
-    // Check if programmer is done loading and has completed all tasks
-    if (programmerStream.isLoading) {
-      return;
-    }
-
-    const taskPlan = programmerStream.values?.taskPlan;
-    const activeTask = taskPlan?.tasks?.[taskPlan?.activeTaskIndex];
-    const isTaskCompleted = activeTask?.completed === true;
-
-    if (!isTaskCompleted) {
+    if (!shouldComplete) {
       return;
     }
 
