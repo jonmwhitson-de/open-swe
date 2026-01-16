@@ -264,6 +264,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Check if user wants to force development despite incomplete dependencies
     const forceStart = body?.force === true;
 
+    // Check if auto-accept plans is enabled (for auto-develop flow)
+    const autoAcceptPlan = body?.auto_accept_plan === true;
+
     // Validate dependencies before allowing development
     const dependencyValidation = validateFeatureDependencies(reconciledGraph, featureId);
 
@@ -315,7 +318,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       targetRepository: managerState.targetRepository,
       taskPlan: managerState.taskPlan,
       branchName: managerState.branchName,
-      autoAcceptPlan: managerState.autoAcceptPlan,
+      // Use autoAcceptPlan from request if provided, otherwise fall back to manager state
+      autoAcceptPlan: autoAcceptPlan || managerState.autoAcceptPlan,
       workspacePath: managerState.workspacePath,
       activeFeatureIds: [featureId],
       features: [selectedFeature, ...(featureDependencies ?? [])],

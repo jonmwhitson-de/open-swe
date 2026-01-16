@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useCallback, useMemo } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -44,6 +44,8 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { calculateLastActivity } from "@/lib/thread-utils";
 import { cn } from "@/lib/utils";
 import {
@@ -260,9 +262,9 @@ export function FeatureInsightsPanel({
     });
   }, [selectedFeature, deleteFeature]);
 
-  const handleStartAutoDevelop = useCallback(() => {
+  const handleStartAutoDevelop = useCallback((autoAcceptPlans: boolean) => {
     onStartPlanner?.();
-    void startAutoDevelop().catch((error) => {
+    void startAutoDevelop({ autoAcceptPlans }).catch((error) => {
       const message =
         error instanceof Error
           ? error.message
@@ -884,11 +886,12 @@ function AutoDevelopPanel({
   autoDevelop: AutoDevelopState;
   featuresById: Record<string, FeatureNode>;
   totalFeatures: number;
-  onStart: () => void;
+  onStart: (autoAcceptPlans: boolean) => void;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
 }) {
+  const [autoAcceptPlans, setAutoAcceptPlans] = useState(true);
   const { status, queue, currentFeatureId, currentIndex, completedInSession, error } = autoDevelop;
   const currentFeature = currentFeatureId ? featuresById[currentFeatureId] : null;
 
@@ -924,7 +927,7 @@ function AutoDevelopPanel({
             {!isActive && !isCompleted && (
               <Button
                 size="sm"
-                onClick={onStart}
+                onClick={() => onStart(autoAcceptPlans)}
                 className="bg-violet-600 hover:bg-violet-700"
               >
                 <Wand2 className="size-4 mr-1" />
@@ -953,19 +956,41 @@ function AutoDevelopPanel({
               </>
             )}
             {isCompleted && (
-              <Button size="sm" variant="outline" onClick={onStart}>
+              <Button size="sm" variant="outline" onClick={() => onStart(autoAcceptPlans)}>
                 <Wand2 className="size-4 mr-1" />
                 Run again
               </Button>
             )}
             {hasError && (
-              <Button size="sm" variant="outline" onClick={onStart}>
+              <Button size="sm" variant="outline" onClick={() => onStart(autoAcceptPlans)}>
                 <Wand2 className="size-4 mr-1" />
                 Retry
               </Button>
             )}
           </div>
         </div>
+
+        {/* Auto-accept plans toggle - only show when not active */}
+        {!isActive && (
+          <div className="flex items-center gap-2">
+            <Switch
+              id="auto-accept-plans"
+              checked={autoAcceptPlans}
+              onCheckedChange={setAutoAcceptPlans}
+            />
+            <Label htmlFor="auto-accept-plans" className="text-xs text-muted-foreground cursor-pointer">
+              Auto-accept plans (skip approval step)
+            </Label>
+          </div>
+        )}
+
+        {/* Show current auto-accept state when active */}
+        {isActive && autoDevelop.autoAcceptPlans && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <CheckCircle2 className="size-3 text-violet-500" />
+            <span>Auto-accepting plans</span>
+          </div>
+        )}
 
         {/* Progress bar */}
         {isActive && queue.length > 0 && (

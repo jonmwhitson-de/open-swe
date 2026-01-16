@@ -62,6 +62,15 @@ export interface AutoDevelopState {
   completedInSession: number;
   /** Error message if status is 'error' */
   error: string | null;
+  /** Whether to auto-accept plans without user approval */
+  autoAcceptPlans: boolean;
+}
+
+export interface AutoDevelopOptions {
+  /** Specific feature IDs to develop (defaults to all) */
+  featureIds?: string[];
+  /** Whether to auto-accept plans without user approval */
+  autoAcceptPlans?: boolean;
 }
 
 export type FeatureRunState = {
@@ -118,14 +127,14 @@ interface FeatureGraphStoreState {
   ) => Promise<void>;
   generateGraph: (workspacePath: string, prompt: string) => Promise<void>;
   requestGraphGeneration: (threadId: string) => Promise<void>;
-  startFeatureDevelopment: (featureId: string, options?: { force?: boolean }) => Promise<void>;
+  startFeatureDevelopment: (featureId: string, options?: { force?: boolean; autoAcceptPlan?: boolean }) => Promise<void>;
   /** Clear the current dependency error */
   clearDependencyError: () => void;
   /**
    * Start auto-developing all features in dependency order.
    * Will skip already completed features.
    */
-  startAutoDevelop: (featureIds?: string[]) => Promise<void>;
+  startAutoDevelop: (options?: AutoDevelopOptions) => Promise<void>;
   /** Pause auto-development (can be resumed) */
   pauseAutoDevelop: () => void;
   /** Resume auto-development from where it was paused */
@@ -181,6 +190,7 @@ const INITIAL_AUTO_DEVELOP_STATE: AutoDevelopState = {
   totalFeatures: 0,
   completedInSession: 0,
   error: null,
+  autoAcceptPlans: false,
 };
 
 const INITIAL_STATE: Omit<
@@ -409,7 +419,7 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
         const result = await startFeatureDevelopmentRun(
           threadId,
           featureId,
-          { force: options?.force },
+          { force: options?.force, autoAcceptPlan: options?.autoAcceptPlan },
         );
 
         // Handle dependency validation error
@@ -491,8 +501,10 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
     clearDependencyError() {
       set({ dependencyError: null });
     },
-    async startAutoDevelop(featureIds) {
+    async startAutoDevelop(options) {
       const { workspacePath, threadId, autoDevelop } = get();
+      const featureIds = options?.featureIds;
+      const autoAcceptPlans = options?.autoAcceptPlans ?? false;
 
       if (!workspacePath || !threadId) {
         console.error("Cannot start auto-develop: missing workspacePath or threadId");
@@ -508,6 +520,7 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
         autoDevelop: {
           ...INITIAL_AUTO_DEVELOP_STATE,
           status: "loading",
+          autoAcceptPlans,
         },
       });
 
@@ -556,11 +569,14 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
             totalFeatures: queue.length,
             completedInSession: 0,
             error: null,
+            autoAcceptPlans,
           },
+          // Also set selectedFeatureId so the stream monitoring in thread-view detects completion
+          selectedFeatureId: firstFeatureId,
         });
 
         // Start developing the first feature
-        await get().startFeatureDevelopment(firstFeatureId, { force: true });
+        await get().startFeatureDevelopment(firstFeatureId, { force: true, autoAcceptPlan: autoAcceptPlans });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to start auto-develop";
         set({
@@ -607,7 +623,10 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
 
       if (!currentRun || currentRun.status === "idle" || currentRun.status === "error") {
         // Restart the current feature
-        await get().startFeatureDevelopment(currentFeatureId, { force: true });
+        await get().startFeatureDevelopment(currentFeatureId, {
+          force: true,
+          autoAcceptPlan: autoDevelop.autoAcceptPlans,
+        });
       }
       // If it's already running, just let it continue
     },
@@ -652,11 +671,16 @@ export const useFeatureGraphStore = create<FeatureGraphStoreState>(
           currentIndex: nextIndex,
           completedInSession,
         },
+        // Also set selectedFeatureId so the stream monitoring in thread-view detects completion
+        selectedFeatureId: nextFeatureId,
       });
 
       if (threadId) {
         try {
-          await get().startFeatureDevelopment(nextFeatureId, { force: true });
+          await get().startFeatureDevelopment(nextFeatureId, {
+            force: true,
+            autoAcceptPlan: autoDevelop.autoAcceptPlans,
+          });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Failed to start next feature";
           set((state) => ({

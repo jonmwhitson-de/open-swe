@@ -142,7 +142,7 @@ export type StartFeatureDevelopmentResult =
 export async function startFeatureDevelopmentRun(
   threadId: string,
   featureId: string,
-  options?: { force?: boolean },
+  options?: { force?: boolean; autoAcceptPlan?: boolean },
 ): Promise<StartFeatureDevelopmentResult> {
   if (!threadId) {
     throw new Error("Thread id is required to start feature development");
@@ -161,6 +161,7 @@ export async function startFeatureDevelopmentRun(
       thread_id: threadId,
       feature_id: featureId,
       force: options?.force ?? false,
+      auto_accept_plan: options?.autoAcceptPlan ?? false,
     }),
   });
 
