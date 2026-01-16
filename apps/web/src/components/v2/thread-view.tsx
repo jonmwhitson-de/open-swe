@@ -489,6 +489,17 @@ export function ThreadView({
         threadId: selectedFeatureRunState.threadId,
       });
     } else if ((featureRunStream.messages?.length ?? 0) > 0) {
+      // Check if the active task is actually completed by the programmer
+      // Don't mark feature as complete just because the stream stopped loading
+      const taskPlan = featureRunStream.values?.taskPlan;
+      const activeTask = taskPlan?.tasks?.[taskPlan?.activeTaskIndex];
+      const isTaskCompleted = activeTask?.completed === true;
+
+      if (!isTaskCompleted) {
+        // Programmer hasn't finished yet - keep status as running
+        return;
+      }
+
       if (currentStatus === "completed") {
         return;
       }
@@ -501,6 +512,7 @@ export function ThreadView({
     featureRunStream.error,
     featureRunStream.isLoading,
     featureRunStream.messages,
+    featureRunStream.values?.taskPlan,
     selectedFeatureId,
     selectedFeatureRunState,
     setFeatureRunStatus,
