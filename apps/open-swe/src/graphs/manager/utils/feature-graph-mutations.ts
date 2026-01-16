@@ -6,6 +6,7 @@ import {
   reconcileFeatureGraph,
 } from "@openswe/shared/feature-graph";
 import {
+  FeatureEdge,
   FeatureGraphFile,
   FeatureNode,
   featureGraphFileSchema,
@@ -91,6 +92,75 @@ export const createFeatureNode = async (
   await persistFeatureGraph(updatedGraph, workspacePath);
 
   return updatedGraph;
+};
+
+/**
+ * Add a dependency edge to the feature graph.
+ * Creates an edge where the target feature depends on the source feature.
+ *
+ * @param graph - The feature graph to modify
+ * @param sourceFeatureId - The upstream feature (dependency)
+ * @param targetFeatureId - The downstream feature (depends on source)
+ * @param edgeType - The type of dependency (default: "depends_on")
+ * @returns The updated feature graph
+ */
+export const addDependencyEdge = (
+  graph: FeatureGraph,
+  sourceFeatureId: string,
+  targetFeatureId: string,
+  edgeType: string = "depends_on",
+): FeatureGraph => {
+  // Validate that both features exist
+  if (!graph.hasFeature(sourceFeatureId)) {
+    logger.warn("Cannot add edge: source feature does not exist", {
+      sourceFeatureId,
+      targetFeatureId,
+    });
+    return graph;
+  }
+
+  if (!graph.hasFeature(targetFeatureId)) {
+    logger.warn("Cannot add edge: target feature does not exist", {
+      sourceFeatureId,
+      targetFeatureId,
+    });
+    return graph;
+  }
+
+  const serialized = graph.toJSON();
+
+  // Check if edge already exists
+  const edgeExists = serialized.edges.some(
+    (edge) =>
+      edge.source === sourceFeatureId &&
+      edge.target === targetFeatureId &&
+      edge.type === edgeType,
+  );
+
+  if (edgeExists) {
+    logger.info("Edge already exists, skipping", {
+      sourceFeatureId,
+      targetFeatureId,
+      edgeType,
+    });
+    return graph;
+  }
+
+  // Create the new edge
+  const newEdge: FeatureEdge = {
+    source: sourceFeatureId,
+    target: targetFeatureId,
+    type: edgeType,
+  };
+
+  const updatedEdges = [...serialized.edges, newEdge];
+
+  return new FeatureGraph({
+    version: serialized.version,
+    nodes: new Map(serialized.nodes),
+    edges: updatedEdges,
+    artifacts: serialized.artifacts,
+  });
 };
 
 export const applyFeatureStatus = (

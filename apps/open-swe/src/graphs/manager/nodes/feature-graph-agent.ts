@@ -19,6 +19,7 @@ import {
 import { z } from "zod";
 import { getMessageContentString } from "@openswe/shared/messages";
 import {
+  addDependencyEdge,
   applyFeatureStatus,
   createFeatureNode,
   persistFeatureGraph,
@@ -390,7 +391,7 @@ ${formatFeatureCatalog(featureGraph, state.activeFeatureIds)}`;
   const createdFeatures: string[] = [];
   const toolMessages: BaseMessage[] = [];
 
-  // Create all extracted features in batch
+  // Phase 1: Create all extracted features (nodes) in batch
   for (const feature of extractedData.features) {
     try {
       if (!updatedGraph) {
@@ -430,6 +431,44 @@ ${formatFeatureCatalog(featureGraph, state.activeFeatureIds)}`;
         error: errorMessage,
       });
     }
+  }
+
+  // Phase 2: Create dependency edges after all features exist
+  // We do this in a second pass because edges require both source and target to exist
+  let edgesCreated = 0;
+  for (const feature of extractedData.features) {
+    if (!feature.dependencies || feature.dependencies.length === 0) {
+      continue;
+    }
+
+    for (const dependencyId of feature.dependencies) {
+      if (!updatedGraph) continue;
+
+      // The feature depends on dependencyId, so:
+      // - dependencyId is the upstream (source)
+      // - feature.featureId is the downstream (target)
+      updatedGraph = addDependencyEdge(
+        updatedGraph,
+        dependencyId,
+        feature.featureId,
+        "depends_on",
+      );
+
+      logger.info("Created dependency edge", {
+        source: dependencyId,
+        target: feature.featureId,
+        type: "depends_on",
+      });
+      edgesCreated++;
+    }
+  }
+
+  // Persist the graph with all edges
+  if (updatedGraph && edgesCreated > 0) {
+    await persistFeatureGraph(updatedGraph, state.workspacePath);
+    logger.info("Persisted feature graph with dependency edges", {
+      edgesCreated,
+    });
   }
 
   // Create summary response
