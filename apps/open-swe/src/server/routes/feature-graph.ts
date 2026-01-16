@@ -118,7 +118,12 @@ export function registerFeatureGraphRoute(app: Hono) {
     }
 
     try {
-      const resolvedWorkspaceAbsPath = resolveInsideRoot(workspaceAbsPath);
+      // In local mode, skip workspace root validation (matches /feature-graph/load behavior)
+      const isLocalMode = process.env.OPEN_SWE_LOCAL_MODE === "true";
+      const resolvedWorkspaceAbsPath = isLocalMode
+        ? workspaceAbsPath
+        : resolveInsideRoot(workspaceAbsPath);
+
       const config: GraphConfig = {
         configurable: {
           workspacePath: resolvedWorkspaceAbsPath,
